@@ -1,0 +1,48 @@
+model Doctor {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseNumber   String    @unique
+  bio             String?
+  experienceYears Int?      @default(0)
+  consultationFee Decimal?  @db.Decimal(10, 2)
+  phone           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  specializations  DoctorSpecialization[]
+  appointments     Appointment[]
+  prescriptions    Prescription[]
+  medicalHistories MedicalHistory[]
+  medicalReports   MedicalReport[]
+
+  @@index([deletedAt])
+  @@map("doctor")
+}
+
+model Specialization {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  doctors DoctorSpecialization[]
+
+  @@index([deletedAt])
+  @@map("specialization")
+}
+
+model DoctorSpecialization {
+  doctorId         String
+  specializationId String
+  doctor           Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+
+  @@id([doctorId, specializationId])
+  @@index([specializationId])
+  @@map("doctor_specialization")
+}

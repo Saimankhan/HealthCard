@@ -10,11 +10,20 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  role          String?   @default("PATIENT")
+  role          Role      @default(PATIENT)
+  deletedAt     DateTime?
   sessions      Session[]
   accounts      Account[]
 
+  patient       Patient?
+  doctor        Doctor?
+  admin         Admin?
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
   @@unique([email])
+  @@index([role])
+  @@index([deletedAt])
   @@map("user")
 }
 

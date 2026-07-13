@@ -1,0 +1,16 @@
+model HealthCard {
+  id                String           @id @default(uuid())
+  patientId         String           @unique
+  patient           Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  cardNumber        String           @unique
+  verificationToken String           @unique
+  status            HealthCardStatus @default(ACTIVE)
+  issuedAt          DateTime         @default(now())
+  expiresAt         DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  deletedAt         DateTime?
+
+  @@index([status])
+  @@map("health_card")
+}

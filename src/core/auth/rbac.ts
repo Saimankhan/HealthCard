@@ -3,23 +3,10 @@ import { headers } from "next/headers";
 
 import { auth } from "@/core/auth/auth";
 import type { Role } from "@/core/auth/roles";
+import { ForbiddenError, UnauthorizedError } from "@/core/api/errors";
 
 export async function getCurrentSession() {
   return auth.api.getSession({ headers: await headers() });
-}
-
-export class UnauthorizedError extends Error {
-  constructor(message = "Authentication required") {
-    super(message);
-    this.name = "UnauthorizedError";
-  }
-}
-
-export class ForbiddenError extends Error {
-  constructor(message = "Insufficient permissions") {
-    super(message);
-    this.name = "ForbiddenError";
-  }
 }
 
 export async function requireSession() {

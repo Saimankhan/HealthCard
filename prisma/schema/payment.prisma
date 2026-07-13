@@ -1,0 +1,21 @@
+model Payment {
+  id                      String        @id @default(uuid())
+  patientId               String
+  appointmentId           String?
+  patient                 Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment             Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  amount                  Decimal       @db.Decimal(10, 2)
+  currency                String        @default("usd")
+  status                  PaymentStatus @default(PENDING)
+  method                  PaymentMethod @default(CARD)
+  stripeCheckoutSessionId String?       @unique
+  stripePaymentIntentId   String?       @unique
+  refundedAmount          Decimal?      @db.Decimal(10, 2)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([status])
+  @@map("payment")
+}

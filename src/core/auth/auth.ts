@@ -1,9 +1,14 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
 import { prisma } from "@/core/db/prisma";
 import { serverEnv } from "@/core/config/env.server";
+
+function generateHealthCardNumber(): string {
+  return `HC-${new Date().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
 
 export const auth = betterAuth({
   secret: serverEnv.BETTER_AUTH_SECRET,
@@ -30,6 +35,29 @@ export const auth = betterAuth({
         type: "string",
         defaultValue: "PATIENT",
         input: false,
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          if (user.role === "PATIENT") {
+            const patient = await prisma.patient.create({
+              data: { userId: user.id },
+            });
+            await prisma.healthCard.create({
+              data: {
+                patientId: patient.id,
+                cardNumber: generateHealthCardNumber(),
+                verificationToken: randomUUID(),
+                expiresAt: new Date(
+                  new Date().setFullYear(new Date().getFullYear() + 3)
+                ),
+              },
+            });
+          }
+        },
       },
     },
   },
