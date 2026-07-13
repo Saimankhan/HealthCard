@@ -36,6 +36,7 @@ function assertWriteAccess(session: Session, report: MedicalReportRecord) {
   const role = session.user.role;
   if (isAdminRole(role)) return;
   if (role === "DOCTOR" && report.doctor?.userId === session.user.id) return;
+  if (role === "PATIENT" && report.patient.userId === session.user.id) return;
   throw new ForbiddenError();
 }
 
