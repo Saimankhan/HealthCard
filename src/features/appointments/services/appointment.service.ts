@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import {
   BadRequestError,
   ConflictError,
@@ -63,7 +64,7 @@ async function assertNoConflict(
 
 function assertReadAccess(session: Session, appointment: AppointmentRecord) {
   const role = session.user.role;
-  if (role === "ADMIN") return;
+  if (isAdminRole(role)) return;
   if (role === "PATIENT" && appointment.patient.userId === session.user.id)
     return;
   if (role === "DOCTOR" && appointment.doctor.userId === session.user.id)
@@ -117,7 +118,7 @@ export async function createAppointmentService(
 ) {
   let patientId: string;
 
-  if (session.user.role === "ADMIN" && input.patientId) {
+  if (isAdminRole(session.user.role) && input.patientId) {
     patientId = input.patientId;
   } else if (session.user.role === "PATIENT") {
     const patient = await patientRepo.findPatientByUserId(session.user.id);
@@ -190,7 +191,7 @@ export async function updateAppointmentStatusService(
   } else if (role === "DOCTOR") {
     if (appointment.doctor.userId !== session.user.id)
       throw new ForbiddenError();
-  } else if (role !== "ADMIN") {
+  } else if (!isAdminRole(role)) {
     throw new ForbiddenError();
   }
 
@@ -260,7 +261,7 @@ export async function rescheduleAppointmentService(
     appointment.doctor.userId !== session.user.id
   ) {
     throw new ForbiddenError();
-  } else if (role !== "ADMIN" && role !== "PATIENT" && role !== "DOCTOR") {
+  } else if (!isAdminRole(role) && role !== "PATIENT" && role !== "DOCTOR") {
     throw new ForbiddenError();
   }
 

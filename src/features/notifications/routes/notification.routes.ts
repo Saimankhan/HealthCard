@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireRole, requireSession } from "@/core/auth/rbac";
+import { ADMIN_ROLES } from "@/core/auth/roles";
 import { successResponse } from "@/core/api/response";
 import { parseSearchParams } from "@/core/api/pagination";
 import { idParamSchema } from "@/core/api/schemas";
@@ -27,7 +28,7 @@ export async function listOwnNotificationsHandler(request: NextRequest) {
 }
 
 export async function createNotificationHandler(request: NextRequest) {
-  await requireRole("ADMIN");
+  await requireRole(...ADMIN_ROLES);
 
   const body = createNotificationSchema.parse(await request.json());
   const notification = await createNotificationService(body);

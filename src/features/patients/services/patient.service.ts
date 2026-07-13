@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
@@ -17,14 +18,14 @@ type PatientRecord = NonNullable<
 
 function assertReadAccess(session: Session, patient: PatientRecord) {
   const role = session.user.role;
-  if (role === "ADMIN" || role === "DOCTOR") return;
+  if (isAdminRole(role) || role === "DOCTOR") return;
   if (role === "PATIENT" && patient.userId === session.user.id) return;
   throw new ForbiddenError();
 }
 
 function assertWriteAccess(session: Session, patient: PatientRecord) {
   const role = session.user.role;
-  if (role === "ADMIN") return;
+  if (isAdminRole(role)) return;
   if (role === "PATIENT" && patient.userId === session.user.id) return;
   throw new ForbiddenError();
 }
@@ -111,7 +112,7 @@ export async function updatePatientService(
 export async function deletePatientService(session: Session, id: string) {
   const patient = await patientRepo.findPatientById(id);
   if (!patient) throw new NotFoundError("Patient");
-  if (session.user.role !== "ADMIN") throw new ForbiddenError();
+  if (!isAdminRole(session.user.role)) throw new ForbiddenError();
 
   const deleted = await patientRepo.softDeletePatient(id);
 

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireRole, requireSession } from "@/core/auth/rbac";
+import { ADMIN_ROLES } from "@/core/auth/roles";
 import { successResponse } from "@/core/api/response";
 import { parseSearchParams } from "@/core/api/pagination";
 import { idParamSchema } from "@/core/api/schemas";
@@ -28,7 +29,7 @@ export async function listDoctorsHandler(request: NextRequest) {
 }
 
 export async function createDoctorHandler(request: NextRequest) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
   const body = createDoctorSchema.parse(await request.json());
   const doctor = await createDoctorService(session.user.id, body);

@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import {
   BadRequestError,
   ForbiddenError,
@@ -24,7 +25,7 @@ type PrescriptionRecord = NonNullable<
 
 function assertReadAccess(session: Session, prescription: PrescriptionRecord) {
   const role = session.user.role;
-  if (role === "ADMIN") return;
+  if (isAdminRole(role)) return;
   if (role === "PATIENT" && prescription.patient.userId === session.user.id)
     return;
   if (role === "DOCTOR" && prescription.doctor.userId === session.user.id)
@@ -34,7 +35,7 @@ function assertReadAccess(session: Session, prescription: PrescriptionRecord) {
 
 function assertWriteAccess(session: Session, prescription: PrescriptionRecord) {
   const role = session.user.role;
-  if (role === "ADMIN") return;
+  if (isAdminRole(role)) return;
   if (role === "DOCTOR" && prescription.doctor.userId === session.user.id)
     return;
   throw new ForbiddenError();

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireRole, requireSession } from "@/core/auth/rbac";
+import { ADMIN_ROLES } from "@/core/auth/roles";
 import { successResponse } from "@/core/api/response";
 import { parseSearchParams } from "@/core/api/pagination";
 import { idParamSchema } from "@/core/api/schemas";
@@ -28,7 +29,7 @@ export async function listSpecializationsHandler(request: NextRequest) {
 }
 
 export async function createSpecializationHandler(request: NextRequest) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
   const body = createSpecializationSchema.parse(await request.json());
   const specialization = await createSpecializationService(
@@ -43,7 +44,7 @@ export async function updateSpecializationHandler(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
   const { id } = idParamSchema.parse(await context.params);
   const body = updateSpecializationSchema.parse(await request.json());
@@ -60,7 +61,7 @@ export async function deleteSpecializationHandler(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
   const { id } = idParamSchema.parse(await context.params);
   await deleteSpecializationService(session.user.id, id);

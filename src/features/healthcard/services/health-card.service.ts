@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import {
   ConflictError,
   ForbiddenError,
@@ -21,7 +22,7 @@ type HealthCardRecord = NonNullable<
 
 function assertReadAccess(session: Session, card: HealthCardRecord) {
   const role = session.user.role;
-  if (role === "ADMIN" || role === "DOCTOR") return;
+  if (isAdminRole(role) || role === "DOCTOR") return;
   if (role === "PATIENT" && card.patient.userId === session.user.id) return;
   throw new ForbiddenError();
 }

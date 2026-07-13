@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireRole, requireSession } from "@/core/auth/rbac";
+import { ADMIN_ROLES } from "@/core/auth/roles";
 import { successResponse } from "@/core/api/response";
 import { parseSearchParams } from "@/core/api/pagination";
 import { idParamSchema } from "@/core/api/schemas";
@@ -19,7 +20,7 @@ import {
 } from "@/features/patients/services/patient.service";
 
 export async function listPatientsHandler(request: NextRequest) {
-  await requireRole("ADMIN", "DOCTOR");
+  await requireRole(...ADMIN_ROLES, "DOCTOR");
 
   const query = listPatientsQuerySchema.parse(parseSearchParams(request.url));
   const { items, meta } = await listPatientsService(query);
@@ -28,7 +29,7 @@ export async function listPatientsHandler(request: NextRequest) {
 }
 
 export async function createPatientHandler(request: NextRequest) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
   const body = createPatientSchema.parse(await request.json());
   const patient = await createPatientService(session.user.id, body);

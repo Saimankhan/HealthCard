@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import {
   BadRequestError,
   ConflictError,
@@ -31,7 +32,7 @@ export async function listPaymentsService(
     const patient = await patientRepo.findPatientByUserId(session.user.id);
     if (!patient) throw new NotFoundError("Patient profile");
     patientId = patient.id;
-  } else if (session.user.role !== "ADMIN") {
+  } else if (!isAdminRole(session.user.role)) {
     throw new ForbiddenError();
   }
 
@@ -52,7 +53,7 @@ export async function getPaymentByIdService(session: Session, id: string) {
   if (!payment) throw new NotFoundError("Payment");
 
   if (
-    session.user.role !== "ADMIN" &&
+    !isAdminRole(session.user.role) &&
     !(
       session.user.role === "PATIENT" &&
       payment.patient.userId === session.user.id

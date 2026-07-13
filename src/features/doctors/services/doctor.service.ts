@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import {
   ConflictError,
   ForbiddenError,
@@ -52,7 +53,7 @@ export async function createDoctorService(
     throw new ConflictError("A doctor profile already exists for this user");
   }
 
-  if (user.role !== "DOCTOR") {
+  if (!isAdminRole(user.role) && user.role !== "DOCTOR") {
     await userRepo.updateUser(user.id, { role: "DOCTOR" });
   }
 
@@ -84,7 +85,7 @@ export async function createDoctorService(
 }
 
 function assertWriteAccess(session: Session, doctor: { userId: string }) {
-  if (session.user.role === "ADMIN") return;
+  if (isAdminRole(session.user.role)) return;
   if (session.user.role === "DOCTOR" && doctor.userId === session.user.id)
     return;
   throw new ForbiddenError();
@@ -121,7 +122,7 @@ export async function updateDoctorService(
 }
 
 export async function deleteDoctorService(session: Session, id: string) {
-  if (session.user.role !== "ADMIN") throw new ForbiddenError();
+  if (!isAdminRole(session.user.role)) throw new ForbiddenError();
 
   const doctor = await doctorRepo.findDoctorById(id);
   if (!doctor) throw new NotFoundError("Doctor");

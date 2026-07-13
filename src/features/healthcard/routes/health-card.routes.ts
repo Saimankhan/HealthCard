@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { requireRole, requireSession } from "@/core/auth/rbac";
+import { ADMIN_ROLES } from "@/core/auth/roles";
 import { successResponse } from "@/core/api/response";
 import { parseSearchParams } from "@/core/api/pagination";
 import { idParamSchema } from "@/core/api/schemas";
@@ -19,7 +20,7 @@ import {
 } from "@/features/healthcard/services/health-card.service";
 
 export async function listHealthCardsHandler(request: NextRequest) {
-  await requireRole("ADMIN");
+  await requireRole(...ADMIN_ROLES);
 
   const query = listHealthCardsQuerySchema.parse(
     parseSearchParams(request.url)
@@ -30,7 +31,7 @@ export async function listHealthCardsHandler(request: NextRequest) {
 }
 
 export async function issueHealthCardHandler(request: NextRequest) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
   const body = issueHealthCardSchema.parse(await request.json());
   const card = await issueHealthCardService(session.user.id, body);
@@ -60,7 +61,7 @@ export async function verifyHealthCardHandler(
   _request: NextRequest,
   context: { params: Promise<{ token: string }> }
 ) {
-  await requireRole("ADMIN", "DOCTOR");
+  await requireRole(...ADMIN_ROLES, "DOCTOR");
 
   const { token } = await context.params;
   const card = await verifyHealthCardByTokenService(token);
@@ -72,7 +73,7 @@ export async function updateHealthCardStatusHandler(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
   const { id } = idParamSchema.parse(await context.params);
   const body = updateHealthCardStatusSchema.parse(await request.json());

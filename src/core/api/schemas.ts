@@ -10,4 +10,9 @@ export const idParamSchema = z.object({
   id: entityIdSchema,
 });
 
+// For routes keyed by User.id (Better Auth's id format), not our own entities.
+export const userIdParamSchema = z.object({
+  id: userIdSchema,
+});
+
 export type IdParam = z.infer<typeof idParamSchema>;

@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import {
   BadRequestError,
   ConflictError,
@@ -50,7 +51,7 @@ export async function createAdminService(
     throw new ConflictError("An admin profile already exists for this user");
   }
 
-  if (user.role !== "ADMIN") {
+  if (!isAdminRole(user.role)) {
     await userRepo.updateUser(user.id, { role: "ADMIN" });
   }
 

@@ -1,5 +1,6 @@
 import "server-only";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
@@ -18,7 +19,7 @@ type MedicalHistoryRecord = NonNullable<
 
 function assertReadAccess(session: Session, record: MedicalHistoryRecord) {
   const role = session.user.role;
-  if (role === "ADMIN") return;
+  if (isAdminRole(role)) return;
   if (role === "PATIENT" && record.patient.userId === session.user.id) return;
   if (role === "DOCTOR") return;
   throw new ForbiddenError();
@@ -26,7 +27,7 @@ function assertReadAccess(session: Session, record: MedicalHistoryRecord) {
 
 function assertWriteAccess(session: Session, record: MedicalHistoryRecord) {
   const role = session.user.role;
-  if (role === "ADMIN") return;
+  if (isAdminRole(role)) return;
   if (role === "DOCTOR" && record.doctor?.userId === session.user.id) return;
   throw new ForbiddenError();
 }
@@ -44,7 +45,10 @@ export async function listMedicalHistoryService(
     const patient = await patientRepo.findPatientByUserId(session.user.id);
     if (!patient) throw new NotFoundError("Patient profile");
     patientId = patient.id;
-  } else if (session.user.role !== "ADMIN" && session.user.role !== "DOCTOR") {
+  } else if (
+    !isAdminRole(session.user.role) &&
+    session.user.role !== "DOCTOR"
+  ) {
     throw new ForbiddenError();
   }
 
@@ -73,7 +77,7 @@ export async function createMedicalHistoryService(
   session: Session,
   input: CreateMedicalHistoryInput
 ) {
-  if (session.user.role !== "DOCTOR" && session.user.role !== "ADMIN") {
+  if (session.user.role !== "DOCTOR" && !isAdminRole(session.user.role)) {
     throw new ForbiddenError();
   }
 

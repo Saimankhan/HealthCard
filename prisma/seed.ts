@@ -25,7 +25,7 @@ const DEMO_PASSWORD = "Password123!";
 async function createUserWithProfile(options: {
   name: string;
   email: string;
-  role: "ADMIN" | "DOCTOR" | "PATIENT";
+  role: "SUPER_ADMIN" | "ADMIN" | "DOCTOR" | "PATIENT";
 }) {
   const existing = await prisma.user.findUnique({
     where: { email: options.email },
@@ -68,12 +68,18 @@ async function main() {
   console.log("Seeding HealthCard demo data...");
 
   // -----------------------------------------------------------------
-  // Admin
+  // Super Admin (root account)
   // -----------------------------------------------------------------
   const adminUser = await createUserWithProfile({
     name: "System Administrator",
     email: "admin@healthcard.dev",
-    role: "ADMIN",
+    role: "SUPER_ADMIN",
+  });
+  // Ensure the role is SUPER_ADMIN even if this account was seeded by an
+  // earlier phase (before the SUPER_ADMIN role existed).
+  await prisma.user.update({
+    where: { id: adminUser.id },
+    data: { role: "SUPER_ADMIN" },
   });
   await prisma.admin.upsert({
     where: { userId: adminUser.id },

@@ -1,22 +1,30 @@
 import type { NextRequest } from "next/server";
 
-import { requireRole } from "@/core/auth/rbac";
+import { requireRole, requireSession } from "@/core/auth/rbac";
+import { ADMIN_ROLES } from "@/core/auth/roles";
 import { successResponse } from "@/core/api/response";
 import { parseSearchParams } from "@/core/api/pagination";
-import { idParamSchema } from "@/core/api/schemas";
+import { userIdParamSchema } from "@/core/api/schemas";
 import {
+  confirmAvatarSchema,
   listUsersQuerySchema,
+  requestAvatarUploadUrlSchema,
   updateUserRoleSchema,
+  updateUserSchema,
 } from "@/features/users/validation/user.validation";
 import {
+  confirmAvatarService,
   deactivateUserService,
+  deleteOwnAccountService,
   getUserByIdService,
   listUsersService,
+  requestAvatarUploadUrlService,
+  updateOwnProfileService,
   updateUserRoleService,
 } from "@/features/users/services/user.service";
 
 export async function listUsersHandler(request: NextRequest) {
-  await requireRole("ADMIN");
+  await requireRole(...ADMIN_ROLES);
 
   const query = listUsersQuerySchema.parse(parseSearchParams(request.url));
   const { items, meta } = await listUsersService(query);
@@ -28,9 +36,9 @@ export async function getUserHandler(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  await requireRole("ADMIN");
+  await requireRole(...ADMIN_ROLES);
 
-  const { id } = idParamSchema.parse(await context.params);
+  const { id } = userIdParamSchema.parse(await context.params);
   const user = await getUserByIdService(id);
 
   return successResponse(user);
@@ -40,11 +48,11 @@ export async function updateUserRoleHandler(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
-  const { id } = idParamSchema.parse(await context.params);
+  const { id } = userIdParamSchema.parse(await context.params);
   const body = updateUserRoleSchema.parse(await request.json());
-  const user = await updateUserRoleService(session.user.id, id, body);
+  const user = await updateUserRoleService(session, id, body);
 
   return successResponse(user);
 }
@@ -53,10 +61,43 @@ export async function deactivateUserHandler(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole(...ADMIN_ROLES);
 
-  const { id } = idParamSchema.parse(await context.params);
+  const { id } = userIdParamSchema.parse(await context.params);
   const user = await deactivateUserService(session.user.id, id);
+
+  return successResponse(user);
+}
+
+export async function updateOwnProfileHandler(request: NextRequest) {
+  const session = await requireSession();
+
+  const body = updateUserSchema.parse(await request.json());
+  const user = await updateOwnProfileService(session.user.id, body);
+
+  return successResponse(user);
+}
+
+export async function deleteOwnAccountHandler(_request: NextRequest) {
+  const session = await requireSession();
+  await deleteOwnAccountService(session);
+  return successResponse({ id: session.user.id });
+}
+
+export async function requestAvatarUploadUrlHandler(request: NextRequest) {
+  const session = await requireSession();
+
+  const body = requestAvatarUploadUrlSchema.parse(await request.json());
+  const result = await requestAvatarUploadUrlService(session, body);
+
+  return successResponse(result);
+}
+
+export async function confirmAvatarHandler(request: NextRequest) {
+  const session = await requireSession();
+
+  const body = confirmAvatarSchema.parse(await request.json());
+  const user = await confirmAvatarService(session, body);
 
   return successResponse(user);
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { Session } from "@/core/auth/auth";
+import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import {
@@ -26,14 +27,14 @@ type MedicalReportRecord = NonNullable<
 
 function assertReadAccess(session: Session, report: MedicalReportRecord) {
   const role = session.user.role;
-  if (role === "ADMIN" || role === "DOCTOR") return;
+  if (isAdminRole(role) || role === "DOCTOR") return;
   if (role === "PATIENT" && report.patient.userId === session.user.id) return;
   throw new ForbiddenError();
 }
 
 function assertWriteAccess(session: Session, report: MedicalReportRecord) {
   const role = session.user.role;
-  if (role === "ADMIN") return;
+  if (isAdminRole(role)) return;
   if (role === "DOCTOR" && report.doctor?.userId === session.user.id) return;
   throw new ForbiddenError();
 }
@@ -45,7 +46,10 @@ export async function requestUploadUrlService(
   if (session.user.role === "PATIENT") {
     const patient = await patientRepo.findPatientByUserId(session.user.id);
     if (!patient || patient.id !== input.patientId) throw new ForbiddenError();
-  } else if (session.user.role !== "DOCTOR" && session.user.role !== "ADMIN") {
+  } else if (
+    session.user.role !== "DOCTOR" &&
+    !isAdminRole(session.user.role)
+  ) {
     throw new ForbiddenError();
   }
 
@@ -73,7 +77,10 @@ export async function listMedicalReportsService(
     const patient = await patientRepo.findPatientByUserId(session.user.id);
     if (!patient) throw new NotFoundError("Patient profile");
     patientId = patient.id;
-  } else if (session.user.role !== "ADMIN" && session.user.role !== "DOCTOR") {
+  } else if (
+    !isAdminRole(session.user.role) &&
+    session.user.role !== "DOCTOR"
+  ) {
     throw new ForbiddenError();
   }
 
@@ -108,7 +115,10 @@ export async function createMedicalReportService(
   if (session.user.role === "PATIENT") {
     const patient = await patientRepo.findPatientByUserId(session.user.id);
     if (!patient || patient.id !== input.patientId) throw new ForbiddenError();
-  } else if (session.user.role !== "DOCTOR" && session.user.role !== "ADMIN") {
+  } else if (
+    session.user.role !== "DOCTOR" &&
+    !isAdminRole(session.user.role)
+  ) {
     throw new ForbiddenError();
   }
 
