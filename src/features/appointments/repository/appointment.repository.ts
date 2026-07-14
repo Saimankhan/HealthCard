@@ -100,3 +100,14 @@ export async function rescheduleAppointment(id: string, scheduledAt: Date) {
     include: appointmentInclude,
   });
 }
+
+export async function existsAppointmentForDoctorAndPatient(
+  doctorId: string,
+  patientId: string
+) {
+  const appointment = await prisma.appointment.findFirst({
+    where: { doctorId, patientId },
+    select: { id: true },
+  });
+  return appointment !== null;
+}

@@ -18,6 +18,7 @@ type NotificationType =
   | "APPOINTMENT_REMINDER"
   | "APPOINTMENT_CANCELLED"
   | "APPOINTMENT_RESCHEDULED"
+  | "NEW_APPOINTMENT"
   | "PRESCRIPTION_READY"
   | "PAYMENT_SUCCESS"
   | "PAYMENT_FAILED"
@@ -41,7 +42,8 @@ const CATEGORY_FILTERS = [
 ];
 
 function categoryOf(type: NotificationType): string {
-  if (type.startsWith("APPOINTMENT")) return "APPOINTMENT";
+  if (type.startsWith("APPOINTMENT") || type === "NEW_APPOINTMENT")
+    return "APPOINTMENT";
   if (type.startsWith("PAYMENT")) return "PAYMENT";
   return "OTHER";
 }
@@ -55,7 +57,7 @@ function iconFor(type: NotificationType) {
   return Bell;
 }
 
-export function NotificationsList() {
+export function DoctorNotificationsList() {
   const [items, setItems] = useState<Notification[] | null>(null);
   const [filter, setFilter] = useState("ALL");
 

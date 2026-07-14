@@ -156,6 +156,13 @@ export async function createAppointmentService(
     message: `Your appointment request for ${appointment.scheduledAt.toDateString()} has been submitted.`,
   });
 
+  await createNotification({
+    userId: appointment.doctor.userId,
+    type: "NEW_APPOINTMENT",
+    title: "New appointment request",
+    message: `${appointment.patient.user.name} requested an appointment on ${appointment.scheduledAt.toDateString()}.`,
+  });
+
   await writeAuditLog({
     actorId: session.user.id,
     action: "CREATE",
@@ -228,6 +235,15 @@ export async function updateAppointmentStatusService(
     });
   }
 
+  if (role === "PATIENT" && status === "CANCELLED") {
+    await createNotification({
+      userId: updated.doctor.userId,
+      type: "APPOINTMENT_CANCELLED",
+      title: "Appointment cancelled",
+      message: `${updated.patient.user.name} cancelled the appointment on ${updated.scheduledAt.toDateString()}.`,
+    });
+  }
+
   await writeAuditLog({
     actorId: session.user.id,
     action: "STATUS_CHANGE",
@@ -283,10 +299,19 @@ export async function rescheduleAppointmentService(
 
   await createNotification({
     userId: updated.patient.userId,
-    type: "APPOINTMENT_CONFIRMATION",
+    type: "APPOINTMENT_RESCHEDULED",
     title: "Appointment rescheduled",
     message: `Your appointment has been rescheduled to ${updated.scheduledAt.toDateString()}.`,
   });
+
+  if (role === "PATIENT") {
+    await createNotification({
+      userId: updated.doctor.userId,
+      type: "APPOINTMENT_RESCHEDULED",
+      title: "Appointment rescheduled",
+      message: `${updated.patient.user.name} rescheduled their appointment to ${updated.scheduledAt.toDateString()}.`,
+    });
+  }
 
   await writeAuditLog({
     actorId: session.user.id,

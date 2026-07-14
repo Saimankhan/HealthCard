@@ -27,11 +27,15 @@ export async function listPatients(params: {
   gender?: Gender;
   bloodGroup?: BloodGroup;
   search?: string;
+  doctorId?: string;
 }) {
   const where: Prisma.PatientWhereInput = {
     deletedAt: null,
     ...(params.gender ? { gender: params.gender } : {}),
     ...(params.bloodGroup ? { bloodGroup: params.bloodGroup } : {}),
+    ...(params.doctorId
+      ? { appointments: { some: { doctorId: params.doctorId } } }
+      : {}),
     ...(params.search
       ? {
           user: {

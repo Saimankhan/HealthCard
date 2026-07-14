@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service"
 import * as medicalHistoryRepo from "@/features/medical-history/repository/medical-history.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
 import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
+import { existsAppointmentForDoctorAndPatient } from "@/features/appointments/repository/appointment.repository";
 import type {
   CreateMedicalHistoryInput,
   ListMedicalHistoryQuery,
@@ -17,11 +18,23 @@ type MedicalHistoryRecord = NonNullable<
   Awaited<ReturnType<typeof medicalHistoryRepo.findMedicalHistoryById>>
 >;
 
-function assertReadAccess(session: Session, record: MedicalHistoryRecord) {
+async function assertReadAccess(
+  session: Session,
+  record: MedicalHistoryRecord
+) {
   const role = session.user.role;
   if (isAdminRole(role)) return;
   if (role === "PATIENT" && record.patient.userId === session.user.id) return;
-  if (role === "DOCTOR") return;
+  if (role === "DOCTOR") {
+    if (record.doctor?.userId === session.user.id) return;
+    const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
+    if (
+      doctor &&
+      (await existsAppointmentForDoctorAndPatient(doctor.id, record.patientId))
+    ) {
+      return;
+    }
+  }
   throw new ForbiddenError();
 }
 
@@ -39,16 +52,25 @@ export async function listMedicalHistoryService(
   const { skip, take } = paginationSkipTake(query);
 
   let patientId = query.patientId;
-  const doctorId = query.doctorId;
+  let doctorId = query.doctorId;
 
   if (session.user.role === "PATIENT") {
     const patient = await patientRepo.findPatientByUserId(session.user.id);
     if (!patient) throw new NotFoundError("Patient profile");
     patientId = patient.id;
-  } else if (
-    !isAdminRole(session.user.role) &&
-    session.user.role !== "DOCTOR"
-  ) {
+  } else if (session.user.role === "DOCTOR") {
+    const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
+    if (!doctor) throw new NotFoundError("Doctor profile");
+    if (patientId) {
+      const assigned = await existsAppointmentForDoctorAndPatient(
+        doctor.id,
+        patientId
+      );
+      if (!assigned) throw new ForbiddenError();
+    } else {
+      doctorId = doctor.id;
+    }
+  } else if (!isAdminRole(session.user.role)) {
     throw new ForbiddenError();
   }
 
@@ -69,7 +91,7 @@ export async function getMedicalHistoryByIdService(
 ) {
   const record = await medicalHistoryRepo.findMedicalHistoryById(id);
   if (!record) throw new NotFoundError("Medical history record");
-  assertReadAccess(session, record);
+  await assertReadAccess(session, record);
   return record;
 }
 
@@ -88,6 +110,11 @@ export async function createMedicalHistoryService(
   if (session.user.role === "DOCTOR") {
     const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
     if (!doctor) throw new NotFoundError("Doctor profile");
+    const assigned = await existsAppointmentForDoctorAndPatient(
+      doctor.id,
+      input.patientId
+    );
+    if (!assigned) throw new ForbiddenError();
     doctorId = doctor.id;
   }
 

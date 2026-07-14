@@ -13,6 +13,10 @@ export default async function Home() {
     redirect("/patient");
   }
 
+  if (session?.user.role === "DOCTOR") {
+    redirect("/doctor");
+  }
+
   if (session) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">

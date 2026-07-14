@@ -12,7 +12,10 @@ import { createNotification } from "@/features/notifications/repository/notifica
 import * as prescriptionRepo from "@/features/prescriptions/repository/prescription.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
 import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
-import { findAppointmentById } from "@/features/appointments/repository/appointment.repository";
+import {
+  findAppointmentById,
+  existsAppointmentForDoctorAndPatient,
+} from "@/features/appointments/repository/appointment.repository";
 import type {
   CreatePrescriptionInput,
   ListPrescriptionsQuery,
@@ -89,6 +92,12 @@ export async function createPrescriptionService(
 
   const patient = await patientRepo.findPatientById(input.patientId);
   if (!patient) throw new NotFoundError("Patient");
+
+  const assigned = await existsAppointmentForDoctorAndPatient(
+    doctor.id,
+    input.patientId
+  );
+  if (!assigned) throw new ForbiddenError();
 
   if (input.appointmentId) {
     const appointment = await findAppointmentById(input.appointmentId);

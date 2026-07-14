@@ -70,6 +70,7 @@ export async function createDoctorService(
       experienceYears: input.experienceYears,
       consultationFee: input.consultationFee,
       phone: input.phone,
+      availability: input.availability,
     },
     input.specializationIds ?? []
   );
@@ -107,6 +108,7 @@ export async function updateDoctorService(
       experienceYears: input.experienceYears,
       consultationFee: input.consultationFee,
       phone: input.phone,
+      availability: input.availability,
     },
     input.specializationIds
   );

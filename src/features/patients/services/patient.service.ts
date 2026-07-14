@@ -6,6 +6,8 @@ import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import { createHealthCard } from "@/features/healthcard/repository/health-card.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
+import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
+import { existsAppointmentForDoctorAndPatient } from "@/features/appointments/repository/appointment.repository";
 import type {
   CreatePatientInput,
   ListPatientsQuery,
@@ -16,10 +18,19 @@ type PatientRecord = NonNullable<
   Awaited<ReturnType<typeof patientRepo.findPatientById>>
 >;
 
-function assertReadAccess(session: Session, patient: PatientRecord) {
+async function assertReadAccess(session: Session, patient: PatientRecord) {
   const role = session.user.role;
-  if (isAdminRole(role) || role === "DOCTOR") return;
+  if (isAdminRole(role)) return;
   if (role === "PATIENT" && patient.userId === session.user.id) return;
+  if (role === "DOCTOR") {
+    const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
+    if (
+      doctor &&
+      (await existsAppointmentForDoctorAndPatient(doctor.id, patient.id))
+    ) {
+      return;
+    }
+  }
   throw new ForbiddenError();
 }
 
@@ -33,7 +44,7 @@ function assertWriteAccess(session: Session, patient: PatientRecord) {
 export async function getPatientByIdService(session: Session, id: string) {
   const patient = await patientRepo.findPatientById(id);
   if (!patient) throw new NotFoundError("Patient");
-  assertReadAccess(session, patient);
+  await assertReadAccess(session, patient);
   return patient;
 }
 
@@ -43,8 +54,19 @@ export async function getOwnPatientProfileService(session: Session) {
   return patient;
 }
 
-export async function listPatientsService(query: ListPatientsQuery) {
+export async function listPatientsService(
+  session: Session,
+  query: ListPatientsQuery
+) {
   const { skip, take } = paginationSkipTake(query);
+
+  let doctorId: string | undefined;
+  if (session.user.role === "DOCTOR") {
+    const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
+    if (!doctor) throw new NotFoundError("Doctor profile");
+    doctorId = doctor.id;
+  }
+
   const { items, total } = await patientRepo.listPatients({
     skip,
     take,
@@ -52,6 +74,7 @@ export async function listPatientsService(query: ListPatientsQuery) {
     gender: query.gender,
     bloodGroup: query.bloodGroup,
     search: query.search,
+    doctorId,
   });
   return { items, meta: paginationMeta(query, total) };
 }

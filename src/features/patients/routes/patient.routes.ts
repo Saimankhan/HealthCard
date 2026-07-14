@@ -20,10 +20,10 @@ import {
 } from "@/features/patients/services/patient.service";
 
 export async function listPatientsHandler(request: NextRequest) {
-  await requireRole(...ADMIN_ROLES, "DOCTOR");
+  const session = await requireRole(...ADMIN_ROLES, "DOCTOR");
 
   const query = listPatientsQuerySchema.parse(parseSearchParams(request.url));
-  const { items, meta } = await listPatientsService(query);
+  const { items, meta } = await listPatientsService(session, query);
 
   return successResponse(items, { meta });
 }
