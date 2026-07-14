@@ -32,6 +32,24 @@ const serverEnvSchema = z.object({
     .string()
     .optional()
     .transform((value) => (value && value.length > 0 ? value : undefined)),
+
+  TWILIO_ACCOUNT_SID: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+  TWILIO_AUTH_TOKEN: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+  TWILIO_FROM_NUMBER: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+
+  CRON_SECRET: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
 });
 
 const parsed = serverEnvSchema.safeParse(process.env);

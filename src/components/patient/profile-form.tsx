@@ -161,7 +161,11 @@ export function ProfileForm({
         fileKey: string;
       }>("/api/users/me/avatar/upload-url", {
         method: "POST",
-        body: JSON.stringify({ fileName: file.name, contentType: file.type }),
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        }),
       });
 
       const uploadRes = await fetch(uploadUrl, {

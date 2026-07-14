@@ -57,10 +57,10 @@ export async function markAllNotificationsReadHandler(_request: NextRequest) {
 }
 
 export async function broadcastNotificationHandler(request: NextRequest) {
-  await requireRole(...ADMIN_ROLES);
+  const session = await requireRole(...ADMIN_ROLES);
 
   const body = broadcastNotificationSchema.parse(await request.json());
-  const result = await broadcastNotificationService(body);
+  const result = await broadcastNotificationService(session.user.id, body);
 
   return successResponse({ sent: result.count }, { status: 201 });
 }

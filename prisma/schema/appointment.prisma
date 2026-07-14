@@ -10,6 +10,7 @@ model Appointment {
   reason          String?
   notes           String?
   cancelledAt     DateTime?
+  reminderSentAt  DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 

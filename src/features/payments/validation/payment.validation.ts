@@ -33,9 +33,14 @@ export const listPaymentsQuerySchema = paginationQuerySchema.extend({
   method: paymentMethodSchema.optional(),
 });
 
+export const verifyPaymentQuerySchema = z.object({
+  sessionId: z.string().trim().min(1),
+});
+
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type UpdatePaymentStatusInput = z.infer<
   typeof updatePaymentStatusSchema
 >;
 export type RefundPaymentInput = z.infer<typeof refundPaymentSchema>;
 export type ListPaymentsQuery = z.infer<typeof listPaymentsQuerySchema>;
+export type VerifyPaymentQuery = z.infer<typeof verifyPaymentQuerySchema>;

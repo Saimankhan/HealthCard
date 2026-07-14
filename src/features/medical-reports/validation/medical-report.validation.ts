@@ -14,6 +14,7 @@ export const requestUploadUrlSchema = z.object({
   patientId: entityIdSchema,
   fileName: z.string().trim().min(1).max(255),
   contentType: z.string().trim().min(1).max(150),
+  fileSize: z.coerce.number().int().positive(),
 });
 
 export const createMedicalReportSchema = z.object({
@@ -28,6 +29,9 @@ export const createMedicalReportSchema = z.object({
 export const updateMedicalReportSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   category: categorySchema.optional(),
+  fileKey: z.string().trim().min(1).optional(),
+  fileType: z.string().trim().max(150).optional(),
+  fileSize: z.coerce.number().int().positive().optional(),
 });
 
 export const listMedicalReportsQuerySchema = paginationQuerySchema.extend({

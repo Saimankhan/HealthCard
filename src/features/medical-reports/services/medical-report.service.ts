@@ -5,6 +5,7 @@ import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import {
+  assertValidFileUpload,
   getSignedDownloadUrl,
   getSignedUploadUrl,
   STORAGE_PREFIX,
@@ -72,6 +73,8 @@ export async function requestUploadUrlService(
 
   const patient = await patientRepo.findPatientById(input.patientId);
   if (!patient) throw new NotFoundError("Patient");
+
+  assertValidFileUpload("medicalReports", input.contentType, input.fileSize);
 
   const safeFileName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const fileKey = `${STORAGE_PREFIX.medicalReports}/${input.patientId}/${randomUUID()}-${safeFileName}`;
@@ -193,6 +196,10 @@ export async function updateMedicalReportService(
   const report = await medicalReportRepo.findMedicalReportById(id);
   if (!report) throw new NotFoundError("Medical report");
   assertWriteAccess(session, report);
+
+  if (input.fileKey && input.fileType) {
+    assertValidFileUpload("medicalReports", input.fileType, input.fileSize);
+  }
 
   const updated = await medicalReportRepo.updateMedicalReport(id, input);
 

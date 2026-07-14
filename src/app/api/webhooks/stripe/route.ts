@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type Stripe from "stripe";
 
 import { stripe } from "@/core/payments/stripe";
 import { serverEnv } from "@/core/config/env.server";
+import {
+  handleChargeRefundedWebhook,
+  handleCheckoutSessionCompletedWebhook,
+  handlePaymentIntentFailedWebhook,
+} from "@/features/payments/services/payment.service";
 
 export async function POST(request: NextRequest) {
   if (!serverEnv.STRIPE_WEBHOOK_SECRET) {
@@ -32,16 +38,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  switch (event.type) {
-    case "checkout.session.completed":
-    case "payment_intent.succeeded":
-    case "payment_intent.payment_failed":
-    case "charge.refunded":
-      // Business-logic handlers (updating Payment records, sending
-      // notifications, etc.) are wired up in the Payments feature phase.
-      break;
-    default:
-      break;
+  try {
+    switch (event.type) {
+      case "checkout.session.completed":
+        await handleCheckoutSessionCompletedWebhook(
+          event.data.object as Stripe.Checkout.Session
+        );
+        break;
+      case "payment_intent.succeeded":
+        // No-op: Checkout Sessions in "payment" mode always emit
+        // checkout.session.completed too, and finalizePaymentSuccess is
+        // idempotent — that event is the authoritative one we act on since
+        // it carries our paymentId in metadata.
+        break;
+      case "payment_intent.payment_failed":
+        await handlePaymentIntentFailedWebhook(
+          event.data.object as Stripe.PaymentIntent
+        );
+        break;
+      case "charge.refunded":
+        await handleChargeRefundedWebhook(event.data.object as Stripe.Charge);
+        break;
+      default:
+        break;
+    }
+  } catch (error) {
+    console.error(`[webhooks/stripe] failed to process ${event.type}`, error);
+    return NextResponse.json(
+      { error: "Webhook handler failed" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ received: true });

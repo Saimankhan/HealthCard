@@ -10,11 +10,13 @@ model Payment {
   method                  PaymentMethod @default(CARD)
   stripeCheckoutSessionId String?       @unique
   stripePaymentIntentId   String?       @unique
+  receiptUrl              String?
   refundedAmount          Decimal?      @db.Decimal(10, 2)
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 
   @@index([patientId])
+  @@index([patientId, createdAt])
   @@index([appointmentId])
   @@index([status])
   @@map("payment")

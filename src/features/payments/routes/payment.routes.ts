@@ -10,13 +10,16 @@ import {
   listPaymentsQuerySchema,
   refundPaymentSchema,
   updatePaymentStatusSchema,
+  verifyPaymentQuerySchema,
 } from "@/features/payments/validation/payment.validation";
 import {
+  createCheckoutSessionService,
   createPaymentService,
   getPaymentByIdService,
   listPaymentsService,
   refundPaymentService,
   updatePaymentStatusService,
+  verifyPaymentService,
 } from "@/features/payments/services/payment.service";
 
 export async function listPaymentsHandler(request: NextRequest) {
@@ -75,6 +78,29 @@ export async function refundPaymentHandler(
   const { id } = idParamSchema.parse(await context.params);
   const body = refundPaymentSchema.parse(await request.json());
   const payment = await refundPaymentService(session.user.id, id, body);
+
+  return successResponse(payment);
+}
+
+export async function createCheckoutSessionHandler(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const session = await requireSession();
+
+  const { id } = idParamSchema.parse(await context.params);
+  const result = await createCheckoutSessionService(session, id);
+
+  return successResponse(result);
+}
+
+export async function verifyPaymentHandler(request: NextRequest) {
+  const session = await requireSession();
+
+  const { sessionId } = verifyPaymentQuerySchema.parse(
+    parseSearchParams(request.url)
+  );
+  const payment = await verifyPaymentService(session, sessionId);
 
   return successResponse(payment);
 }

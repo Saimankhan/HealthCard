@@ -57,3 +57,109 @@ export function appointmentConfirmationEmail(details: {
     ),
   };
 }
+
+export function appointmentCancellationEmail(details: {
+  patientName: string;
+  doctorName: string;
+  dateTime: string;
+}): EmailTemplate {
+  return {
+    subject: "Appointment Cancelled",
+    html: layout(
+      "Appointment Cancelled",
+      `<p>Hi ${details.patientName}, your appointment with Dr. ${details.doctorName} scheduled for:</p>
+       <p style="font-weight:bold;">${details.dateTime}</p>
+       <p>has been cancelled. You can book a new appointment at any time from your dashboard.</p>`
+    ),
+  };
+}
+
+export function appointmentReminderEmail(details: {
+  patientName: string;
+  doctorName: string;
+  dateTime: string;
+}): EmailTemplate {
+  return {
+    subject: "Appointment Reminder",
+    html: layout(
+      "Upcoming Appointment",
+      `<p>Hi ${details.patientName}, this is a reminder of your upcoming appointment with Dr. ${details.doctorName}:</p>
+       <p style="font-weight:bold;">${details.dateTime}</p>`
+    ),
+  };
+}
+
+export function prescriptionReadyEmail(details: {
+  patientName: string;
+  doctorName: string;
+}): EmailTemplate {
+  return {
+    subject: "New Prescription Available",
+    html: layout(
+      "New Prescription",
+      `<p>Hi ${details.patientName}, Dr. ${details.doctorName} has issued a new prescription for you.</p>
+       <p>Log in to your HealthCard account to view the details.</p>`
+    ),
+  };
+}
+
+export function paymentSuccessEmail(details: {
+  patientName: string;
+  amount: string;
+  currency: string;
+  receiptUrl?: string | null;
+}): EmailTemplate {
+  return {
+    subject: "Payment Received",
+    html: layout(
+      "Payment Received",
+      `<p>Hi ${details.patientName}, we received your payment of:</p>
+       <p style="font-weight:bold;">${details.amount} ${details.currency.toUpperCase()}</p>
+       ${
+         details.receiptUrl
+           ? `<p><a href="${details.receiptUrl}" style="background:#171717;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;">View Receipt</a></p>`
+           : ""
+       }`
+    ),
+  };
+}
+
+export function paymentFailedEmail(details: {
+  patientName: string;
+  amount: string;
+  currency: string;
+}): EmailTemplate {
+  return {
+    subject: "Payment Failed",
+    html: layout(
+      "Payment Failed",
+      `<p>Hi ${details.patientName}, your payment of ${details.amount} ${details.currency.toUpperCase()} could not be processed.</p>
+       <p>Please try again from your payments page, or contact support if the issue persists.</p>`
+    ),
+  };
+}
+
+export function refundEmail(details: {
+  patientName: string;
+  amount: string;
+  currency: string;
+}): EmailTemplate {
+  return {
+    subject: "Refund Processed",
+    html: layout(
+      "Refund Processed",
+      `<p>Hi ${details.patientName}, a refund of ${details.amount} ${details.currency.toUpperCase()} has been issued to your original payment method.</p>
+       <p>It may take a few business days to appear on your statement.</p>`
+    ),
+  };
+}
+
+export function adminAnnouncementEmail(details: {
+  title: string;
+  message: string;
+}): EmailTemplate {
+  return {
+    subject: details.title,
+    html: layout(details.title, `<p>${details.message}</p>`),
+  };
+}

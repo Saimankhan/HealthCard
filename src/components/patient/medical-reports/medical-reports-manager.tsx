@@ -63,6 +63,7 @@ export function MedicalReportsManager({ patientId }: { patientId: string }) {
     useState<(typeof CATEGORY_OPTIONS)[number]>("OTHER");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
@@ -91,12 +92,35 @@ export function MedicalReportsManager({ patientId }: { patientId: string }) {
     setDialogOpen(true);
   }
 
+  function uploadWithProgress(url: string, file: File): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.setRequestHeader(
+        "Content-Type",
+        file.type || "application/octet-stream"
+      );
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error("Upload to storage failed"));
+      };
+      xhr.onerror = () => reject(new Error("Upload to storage failed"));
+      xhr.send(file);
+    });
+  }
+
   async function submitUpload() {
     if (!pendingFile || !title.trim()) {
       toast.error("Give the report a title");
       return;
     }
     setIsUploading(true);
+    setUploadProgress(0);
     try {
       const { uploadUrl, fileKey } = await apiFetch<{
         uploadUrl: string;
@@ -107,17 +131,11 @@ export function MedicalReportsManager({ patientId }: { patientId: string }) {
           patientId,
           fileName: pendingFile.name,
           contentType: pendingFile.type || "application/octet-stream",
+          fileSize: pendingFile.size,
         }),
       });
 
-      const uploadRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": pendingFile.type || "application/octet-stream",
-        },
-        body: pendingFile,
-      });
-      if (!uploadRes.ok) throw new Error("Upload to storage failed");
+      await uploadWithProgress(uploadUrl, pendingFile);
 
       await apiFetch("/api/medical-reports", {
         method: "POST",
@@ -139,6 +157,7 @@ export function MedicalReportsManager({ patientId }: { patientId: string }) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -291,10 +310,18 @@ export function MedicalReportsManager({ patientId }: { patientId: string }) {
                 File: {pendingFile.name}
               </p>
             )}
+            {isUploading && (
+              <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+                <div
+                  className="bg-primary h-full transition-[width] duration-150"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button disabled={isUploading} onClick={submitUpload}>
-              {isUploading ? "Uploading..." : "Upload"}
+              {isUploading ? `Uploading... ${uploadProgress}%` : "Upload"}
             </Button>
           </DialogFooter>
         </DialogContent>

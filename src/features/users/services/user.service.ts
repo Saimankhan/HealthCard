@@ -10,6 +10,7 @@ import {
 } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import {
+  assertValidFileUpload,
   deleteObject,
   getSignedUploadUrl,
   STORAGE_PREFIX,
@@ -246,6 +247,8 @@ export async function requestAvatarUploadUrlService(
   session: Session,
   input: RequestAvatarUploadUrlInput
 ) {
+  assertValidFileUpload("profilePhotos", input.contentType, input.fileSize);
+
   const safeFileName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const fileKey = `${STORAGE_PREFIX.profilePhotos}/${session.user.id}/${randomUUID()}-${safeFileName}`;
 

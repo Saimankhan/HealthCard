@@ -8,6 +8,8 @@ export async function createNotification(input: {
   title: string;
   message: string;
   metadata?: Prisma.InputJsonValue;
+  channelEmail?: boolean;
+  channelSms?: boolean;
 }) {
   return prisma.notification.create({
     data: {
@@ -16,23 +18,44 @@ export async function createNotification(input: {
       title: input.title,
       message: input.message,
       metadata: input.metadata,
+      channelEmail: input.channelEmail ?? false,
+      channelSms: input.channelSms ?? false,
     },
   });
 }
 
-export async function createNotificationsForUsers(input: {
-  userIds: string[];
-  type: NotificationType;
-  title: string;
-  message: string;
-}) {
-  return prisma.notification.createMany({
-    data: input.userIds.map((userId) => ({
-      userId,
-      type: input.type,
-      title: input.title,
-      message: input.message,
-    })),
+export async function updateDeliveryStatus(
+  id: string,
+  status: { emailSent?: boolean; smsSent?: boolean }
+) {
+  return prisma.notification.update({ where: { id }, data: status });
+}
+
+/**
+ * Notifications whose requested channels haven't been marked delivered yet,
+ * within a retry window (older failures are assumed permanently undeliverable
+ * and left alone rather than retried forever).
+ */
+export async function listPendingDeliveries(since: Date) {
+  return prisma.notification.findMany({
+    where: {
+      createdAt: { gte: since },
+      OR: [
+        { channelEmail: true, emailSent: false },
+        { channelSms: true, smsSent: false },
+      ],
+    },
+    include: {
+      user: { select: { id: true, email: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 200,
+  });
+}
+
+export async function deleteOldReadNotifications(before: Date) {
+  return prisma.notification.deleteMany({
+    where: { isRead: true, createdAt: { lt: before } },
   });
 }
 

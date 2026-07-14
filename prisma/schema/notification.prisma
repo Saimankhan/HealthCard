@@ -7,10 +7,15 @@ model Notification {
   message   String
   isRead    Boolean          @default(false)
   metadata  Json?
+  channelEmail Boolean       @default(false)
+  channelSms   Boolean       @default(false)
+  emailSent    Boolean       @default(false)
+  smsSent      Boolean       @default(false)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([isRead])
   @@map("notification")
 }

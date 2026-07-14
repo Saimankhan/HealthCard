@@ -19,6 +19,20 @@ export async function findPaymentById(id: string) {
   });
 }
 
+export async function findPaymentByCheckoutSessionId(sessionId: string) {
+  return prisma.payment.findUnique({
+    where: { stripeCheckoutSessionId: sessionId },
+    include: paymentInclude,
+  });
+}
+
+export async function findPaymentByPaymentIntentId(paymentIntentId: string) {
+  return prisma.payment.findUnique({
+    where: { stripePaymentIntentId: paymentIntentId },
+    include: paymentInclude,
+  });
+}
+
 export async function listPayments(params: {
   skip: number;
   take: number;
@@ -55,6 +69,31 @@ export async function updatePaymentStatus(id: string, status: PaymentStatus) {
   return prisma.payment.update({
     where: { id },
     data: { status },
+    include: paymentInclude,
+  });
+}
+
+export async function setCheckoutSessionId(id: string, sessionId: string) {
+  return prisma.payment.update({
+    where: { id },
+    data: { stripeCheckoutSessionId: sessionId },
+    include: paymentInclude,
+  });
+}
+
+export async function markPaymentSucceeded(
+  id: string,
+  details: { paymentIntentId?: string | null; receiptUrl?: string | null }
+) {
+  return prisma.payment.update({
+    where: { id },
+    data: {
+      status: "SUCCEEDED",
+      ...(details.paymentIntentId
+        ? { stripePaymentIntentId: details.paymentIntentId }
+        : {}),
+      ...(details.receiptUrl ? { receiptUrl: details.receiptUrl } : {}),
+    },
     include: paymentInclude,
   });
 }

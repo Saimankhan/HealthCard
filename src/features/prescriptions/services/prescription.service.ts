@@ -7,8 +7,9 @@ import {
   NotFoundError,
 } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
+import { prescriptionReadyEmail } from "@/core/email/templates";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
-import { createNotification } from "@/features/notifications/repository/notification.repository";
+import { notifyUser } from "@/features/notifications/services/notification.service";
 import * as prescriptionRepo from "@/features/prescriptions/repository/prescription.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
 import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
@@ -122,11 +123,16 @@ export async function createPrescriptionService(
     notes: input.notes,
   });
 
-  await createNotification({
+  const { subject, html } = prescriptionReadyEmail({
+    patientName: patient.user.name,
+    doctorName: doctor.user.name,
+  });
+  await notifyUser({
     userId: patient.userId,
     type: "PRESCRIPTION_READY",
     title: "New prescription available",
     message: "Your doctor has issued a new prescription.",
+    email: { to: patient.user.email, subject, html },
   });
 
   await writeAuditLog({

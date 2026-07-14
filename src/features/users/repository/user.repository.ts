@@ -24,6 +24,13 @@ export async function listUserIds(role?: Role) {
   return users.map((u) => u.id);
 }
 
+export async function listUsersForBroadcast(role?: Role) {
+  return prisma.user.findMany({
+    where: { deletedAt: null, suspendedAt: null, ...(role ? { role } : {}) },
+    select: { id: true, email: true },
+  });
+}
+
 export async function listUsers(params: {
   skip: number;
   take: number;

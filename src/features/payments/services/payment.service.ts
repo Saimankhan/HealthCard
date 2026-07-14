@@ -1,4 +1,5 @@
 import "server-only";
+import type Stripe from "stripe";
 import type { Session } from "@/core/auth/auth";
 import { isAdminRole } from "@/core/auth/roles";
 import {
@@ -8,17 +9,155 @@ import {
   NotFoundError,
 } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
-import { stripe } from "@/core/payments/stripe";
+import { clientEnv } from "@/core/config/env.client";
+import { getOrCreateStripeCustomer, stripe } from "@/core/payments/stripe";
+import {
+  paymentFailedEmail,
+  paymentSuccessEmail,
+  refundEmail,
+} from "@/core/email/templates";
+import { paymentConfirmationSms } from "@/core/sms/templates";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
-import { createNotification } from "@/features/notifications/repository/notification.repository";
+import { notifyUser } from "@/features/notifications/services/notification.service";
 import * as paymentRepo from "@/features/payments/repository/payment.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
+import {
+  findAppointmentById,
+  updateAppointmentStatus,
+} from "@/features/appointments/repository/appointment.repository";
 import type {
   CreatePaymentInput,
   ListPaymentsQuery,
   RefundPaymentInput,
 } from "@/features/payments/validation/payment.validation";
 import type { PaymentStatus } from "@/generated/prisma/client";
+
+type PaymentRecord = NonNullable<
+  Awaited<ReturnType<typeof paymentRepo.findPaymentById>>
+>;
+
+function assertPaymentAccess(session: Session, payment: PaymentRecord) {
+  if (
+    !isAdminRole(session.user.role) &&
+    !(
+      session.user.role === "PATIENT" &&
+      payment.patient.userId === session.user.id
+    )
+  ) {
+    throw new ForbiddenError();
+  }
+}
+
+async function confirmLinkedAppointmentIfPending(payment: PaymentRecord) {
+  if (!payment.appointmentId) return;
+  const appointment = await findAppointmentById(payment.appointmentId);
+  if (appointment && appointment.status === "PENDING") {
+    await updateAppointmentStatus(appointment.id, "CONFIRMED");
+  }
+}
+
+async function notifyPaymentSucceeded(payment: PaymentRecord) {
+  const amount = Number(payment.amount).toFixed(2);
+  const { subject, html } = paymentSuccessEmail({
+    patientName: payment.patient.user.name,
+    amount,
+    currency: payment.currency,
+    receiptUrl: payment.receiptUrl,
+  });
+
+  await notifyUser({
+    userId: payment.patient.userId,
+    type: "PAYMENT_SUCCESS",
+    title: "Payment received",
+    message: `Your payment of ${amount} ${payment.currency.toUpperCase()} was successful.`,
+    email: { to: payment.patient.user.email, subject, html },
+    ...(payment.patient.phone
+      ? {
+          sms: {
+            to: payment.patient.phone,
+            body: paymentConfirmationSms({
+              amount,
+              currency: payment.currency,
+            }),
+          },
+        }
+      : {}),
+  });
+}
+
+async function notifyPaymentFailed(payment: PaymentRecord) {
+  const amount = Number(payment.amount).toFixed(2);
+  const { subject, html } = paymentFailedEmail({
+    patientName: payment.patient.user.name,
+    amount,
+    currency: payment.currency,
+  });
+
+  await notifyUser({
+    userId: payment.patient.userId,
+    type: "PAYMENT_FAILED",
+    title: "Payment failed",
+    message: `Your payment of ${amount} ${payment.currency.toUpperCase()} could not be processed.`,
+    email: { to: payment.patient.user.email, subject, html },
+  });
+}
+
+async function notifyPaymentRefunded(
+  payment: PaymentRecord,
+  refundAmount: number
+) {
+  const { subject, html } = refundEmail({
+    patientName: payment.patient.user.name,
+    amount: refundAmount.toFixed(2),
+    currency: payment.currency,
+  });
+
+  await notifyUser({
+    userId: payment.patient.userId,
+    type: "PAYMENT_SUCCESS",
+    title: "Refund processed",
+    message: `A refund of ${refundAmount.toFixed(2)} ${payment.currency.toUpperCase()} has been issued.`,
+    email: { to: payment.patient.user.email, subject, html },
+  });
+}
+
+/** Idempotent: safe to call multiple times for the same payment/event. */
+async function finalizePaymentSuccess(
+  paymentId: string,
+  details: { paymentIntentId?: string | null }
+) {
+  const payment = await paymentRepo.findPaymentById(paymentId);
+  if (!payment || payment.status === "SUCCEEDED") return payment;
+
+  let receiptUrl: string | null = null;
+  if (details.paymentIntentId) {
+    try {
+      const intent = await stripe.paymentIntents.retrieve(
+        details.paymentIntentId,
+        { expand: ["latest_charge"] }
+      );
+      const charge = intent.latest_charge;
+      if (charge && typeof charge !== "string") {
+        receiptUrl = charge.receipt_url ?? null;
+      }
+    } catch (error) {
+      console.error(
+        `[payments] failed to fetch receipt for payment ${paymentId}`,
+        error
+      );
+    }
+  }
+
+  const updated = await paymentRepo.markPaymentSucceeded(paymentId, {
+    paymentIntentId: details.paymentIntentId,
+    receiptUrl,
+  });
+
+  await confirmLinkedAppointmentIfPending(updated);
+  await notifyPaymentSucceeded(updated);
+
+  return updated;
+}
 
 export async function listPaymentsService(
   session: Session,
@@ -51,17 +190,7 @@ export async function listPaymentsService(
 export async function getPaymentByIdService(session: Session, id: string) {
   const payment = await paymentRepo.findPaymentById(id);
   if (!payment) throw new NotFoundError("Payment");
-
-  if (
-    !isAdminRole(session.user.role) &&
-    !(
-      session.user.role === "PATIENT" &&
-      payment.patient.userId === session.user.id
-    )
-  ) {
-    throw new ForbiddenError();
-  }
-
+  assertPaymentAccess(session, payment);
   return payment;
 }
 
@@ -103,19 +232,10 @@ export async function updatePaymentStatusService(
   const updated = await paymentRepo.updatePaymentStatus(id, status);
 
   if (status === "SUCCEEDED") {
-    await createNotification({
-      userId: updated.patient.userId,
-      type: "PAYMENT_SUCCESS",
-      title: "Payment received",
-      message: `Your payment of ${updated.amount} ${updated.currency.toUpperCase()} was successful.`,
-    });
+    await confirmLinkedAppointmentIfPending(updated);
+    await notifyPaymentSucceeded(updated);
   } else if (status === "FAILED") {
-    await createNotification({
-      userId: updated.patient.userId,
-      type: "PAYMENT_FAILED",
-      title: "Payment failed",
-      message: `Your payment of ${updated.amount} ${updated.currency.toUpperCase()} could not be processed.`,
-    });
+    await notifyPaymentFailed(updated);
   }
 
   await writeAuditLog({
@@ -127,6 +247,90 @@ export async function updatePaymentStatusService(
   });
 
   return updated;
+}
+
+const CHECKOUT_RATE_LIMIT = { limit: 10, windowSeconds: 60 };
+
+export async function createCheckoutSessionService(
+  session: Session,
+  paymentId: string
+) {
+  const payment = await paymentRepo.findPaymentById(paymentId);
+  if (!payment) throw new NotFoundError("Payment");
+  assertPaymentAccess(session, payment);
+
+  if (payment.status !== "PENDING") {
+    throw new ConflictError("Only pending payments can be paid");
+  }
+
+  const { checkRateLimit } = await import("@/core/security/rate-limit");
+  const allowed = await checkRateLimit(
+    `checkout:${session.user.id}`,
+    CHECKOUT_RATE_LIMIT.limit,
+    CHECKOUT_RATE_LIMIT.windowSeconds
+  );
+  if (!allowed) {
+    throw new ConflictError(
+      "Too many checkout attempts. Please wait a moment."
+    );
+  }
+
+  const customerId = await getOrCreateStripeCustomer({
+    id: payment.patient.id,
+    stripeCustomerId: payment.patient.stripeCustomerId,
+    user: payment.patient.user,
+  });
+
+  const appUrl = clientEnv.NEXT_PUBLIC_APP_URL;
+  const checkoutSession = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer: customerId,
+    line_items: [
+      {
+        price_data: {
+          currency: payment.currency,
+          product_data: { name: "HealthCard consultation payment" },
+          unit_amount: Math.round(Number(payment.amount) * 100),
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: `${appUrl}/patient/payments/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}/patient/payments/cancel?paymentId=${payment.id}`,
+    metadata: { paymentId: payment.id },
+  });
+
+  if (!checkoutSession.url) {
+    throw new ConflictError("Stripe did not return a checkout URL");
+  }
+
+  await paymentRepo.setCheckoutSessionId(payment.id, checkoutSession.id);
+
+  return { url: checkoutSession.url };
+}
+
+export async function verifyPaymentService(
+  session: Session,
+  sessionId: string
+) {
+  const payment = await paymentRepo.findPaymentByCheckoutSessionId(sessionId);
+  if (!payment) throw new NotFoundError("Payment");
+  assertPaymentAccess(session, payment);
+
+  if (payment.status === "PENDING") {
+    const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
+    if (checkoutSession.payment_status === "paid") {
+      const updated = await finalizePaymentSuccess(payment.id, {
+        paymentIntentId:
+          typeof checkoutSession.payment_intent === "string"
+            ? checkoutSession.payment_intent
+            : (checkoutSession.payment_intent?.id ?? null),
+      });
+      return updated ?? payment;
+    }
+  }
+
+  return payment;
 }
 
 export async function refundPaymentService(
@@ -163,12 +367,7 @@ export async function refundPaymentService(
     refundAmount.toFixed(2)
   );
 
-  await createNotification({
-    userId: updated.patient.userId,
-    type: "PAYMENT_SUCCESS",
-    title: "Refund processed",
-    message: `A refund of ${refundAmount.toFixed(2)} ${updated.currency.toUpperCase()} has been issued.`,
-  });
+  await notifyPaymentRefunded(updated, refundAmount);
 
   await writeAuditLog({
     actorId,
@@ -179,4 +378,70 @@ export async function refundPaymentService(
   });
 
   return updated;
+}
+
+// ---------------------------------------------------------------------
+// Stripe webhook business logic — called from app/api/webhooks/stripe only.
+// Each handler re-derives the payment from Stripe identifiers and is a
+// no-op if the payment is already in the target state, so replayed/
+// out-of-order webhook deliveries are safe.
+// ---------------------------------------------------------------------
+
+export async function handleCheckoutSessionCompletedWebhook(
+  session: Stripe.Checkout.Session
+) {
+  const paymentId = session.metadata?.paymentId;
+  const payment = paymentId
+    ? await paymentRepo.findPaymentById(paymentId)
+    : await paymentRepo.findPaymentByCheckoutSessionId(session.id);
+  if (!payment) return;
+
+  await finalizePaymentSuccess(payment.id, {
+    paymentIntentId:
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : (session.payment_intent?.id ?? null),
+  });
+}
+
+export async function handlePaymentIntentFailedWebhook(
+  paymentIntent: Stripe.PaymentIntent
+) {
+  const payment = await paymentRepo.findPaymentByPaymentIntentId(
+    paymentIntent.id
+  );
+  if (!payment || payment.status !== "PENDING") return;
+
+  const updated = await paymentRepo.updatePaymentStatus(payment.id, "FAILED");
+  await notifyPaymentFailed(updated);
+}
+
+export async function handleChargeRefundedWebhook(charge: Stripe.Charge) {
+  const paymentIntentId =
+    typeof charge.payment_intent === "string"
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+  if (!paymentIntentId) return;
+
+  const payment =
+    await paymentRepo.findPaymentByPaymentIntentId(paymentIntentId);
+  if (!payment) return;
+  if (
+    payment.status === "REFUNDED" ||
+    payment.status === "PARTIALLY_REFUNDED"
+  ) {
+    return;
+  }
+
+  const refundedAmount = charge.amount_refunded / 100;
+  if (refundedAmount <= 0) return;
+
+  const isFullRefund = refundedAmount >= Number(payment.amount);
+  const updated = await paymentRepo.applyRefund(
+    payment.id,
+    isFullRefund ? "REFUNDED" : "PARTIALLY_REFUNDED",
+    refundedAmount.toFixed(2)
+  );
+
+  await notifyPaymentRefunded(updated, refundedAmount);
 }

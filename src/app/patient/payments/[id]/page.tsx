@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/patient/status-badge";
+import { PayNowButton } from "@/components/patient/payments/pay-now-button";
 import { formatCurrency, formatDateTime, formatEnumLabel } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Payment - HealthCard" };
@@ -76,6 +77,13 @@ export default async function PaymentDetailPage({
               </div>
             )}
           </div>
+
+          {payment.status === "PENDING" && (
+            <>
+              <Separator />
+              <PayNowButton paymentId={payment.id} />
+            </>
+          )}
 
           {(payment.status === "REFUNDED" ||
             payment.status === "PARTIALLY_REFUNDED") && (

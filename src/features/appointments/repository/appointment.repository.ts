@@ -101,6 +101,34 @@ export async function rescheduleAppointment(id: string, scheduledAt: Date) {
   });
 }
 
+export async function findAppointmentsNeedingReminder(
+  windowStart: Date,
+  windowEnd: Date
+) {
+  return prisma.appointment.findMany({
+    where: {
+      status: "CONFIRMED",
+      reminderSentAt: null,
+      scheduledAt: { gte: windowStart, lte: windowEnd },
+    },
+    include: appointmentInclude,
+  });
+}
+
+export async function markReminderSent(id: string) {
+  return prisma.appointment.update({
+    where: { id },
+    data: { reminderSentAt: new Date() },
+  });
+}
+
+export async function findExpiredPendingAppointments(before: Date) {
+  return prisma.appointment.findMany({
+    where: { status: "PENDING", scheduledAt: { lt: before } },
+    include: appointmentInclude,
+  });
+}
+
 export async function existsAppointmentForDoctorAndPatient(
   doctorId: string,
   patientId: string

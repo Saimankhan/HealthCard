@@ -8,11 +8,24 @@ import {
   NotFoundError,
 } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
+import { formatDateTime } from "@/lib/format";
+import {
+  appointmentCancellationEmail,
+  appointmentConfirmationEmail,
+  appointmentReminderEmail,
+} from "@/core/email/templates";
+import {
+  appointmentCancellationSms,
+  appointmentConfirmationSms,
+  appointmentReminderSms,
+} from "@/core/sms/templates";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import { createNotification } from "@/features/notifications/repository/notification.repository";
+import { notifyUser } from "@/features/notifications/services/notification.service";
 import * as appointmentRepo from "@/features/appointments/repository/appointment.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
 import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
+import { createPayment } from "@/features/payments/repository/payment.repository";
 import type { AppointmentStatus } from "@/generated/prisma/client";
 import type {
   CreateAppointmentInput,
@@ -163,6 +176,15 @@ export async function createAppointmentService(
     message: `${appointment.patient.user.name} requested an appointment on ${appointment.scheduledAt.toDateString()}.`,
   });
 
+  if (doctor.consultationFee && Number(doctor.consultationFee) > 0) {
+    await createPayment({
+      patient: { connect: { id: appointment.patientId } },
+      appointment: { connect: { id: appointment.id } },
+      amount: doctor.consultationFee,
+      method: "CARD",
+    });
+  }
+
   await writeAuditLog({
     actorId: session.user.id,
     action: "CREATE",
@@ -227,11 +249,39 @@ export async function updateAppointmentStatusService(
   };
   const copy = notificationCopy[status];
   if (copy) {
-    await createNotification({
+    const dateTime = formatDateTime(updated.scheduledAt);
+    const emailTemplate =
+      status === "CONFIRMED"
+        ? appointmentConfirmationEmail({
+            patientName: updated.patient.user.name,
+            doctorName: updated.doctor.user.name,
+            dateTime,
+          })
+        : appointmentCancellationEmail({
+            patientName: updated.patient.user.name,
+            doctorName: updated.doctor.user.name,
+            dateTime,
+          });
+    const smsBody =
+      status === "CONFIRMED"
+        ? appointmentConfirmationSms({
+            doctorName: updated.doctor.user.name,
+            dateTime,
+          })
+        : appointmentCancellationSms({
+            doctorName: updated.doctor.user.name,
+            dateTime,
+          });
+
+    await notifyUser({
       userId: updated.patient.userId,
       type: copy.type,
       title: copy.title,
       message: copy.message,
+      email: { to: updated.patient.user.email, ...emailTemplate },
+      ...(updated.patient.phone
+        ? { sms: { to: updated.patient.phone, body: smsBody } }
+        : {}),
     });
   }
 
@@ -322,4 +372,89 @@ export async function rescheduleAppointmentService(
   });
 
   return updated;
+}
+
+const REMINDER_WINDOW_HOURS = 24;
+
+/** Intended to be invoked by the /api/cron/appointment-reminders route. */
+export async function sendAppointmentRemindersService() {
+  const windowStart = new Date();
+  const windowEnd = new Date(
+    windowStart.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000
+  );
+  const appointments = await appointmentRepo.findAppointmentsNeedingReminder(
+    windowStart,
+    windowEnd
+  );
+
+  for (const appointment of appointments) {
+    const dateTime = formatDateTime(appointment.scheduledAt);
+    const { subject, html } = appointmentReminderEmail({
+      patientName: appointment.patient.user.name,
+      doctorName: appointment.doctor.user.name,
+      dateTime,
+    });
+
+    await notifyUser({
+      userId: appointment.patient.userId,
+      type: "APPOINTMENT_REMINDER",
+      title: "Upcoming appointment",
+      message: `Reminder: your appointment with Dr. ${appointment.doctor.user.name} is on ${dateTime}.`,
+      email: { to: appointment.patient.user.email, subject, html },
+      ...(appointment.patient.phone
+        ? {
+            sms: {
+              to: appointment.patient.phone,
+              body: appointmentReminderSms({
+                doctorName: appointment.doctor.user.name,
+                dateTime,
+              }),
+            },
+          }
+        : {}),
+    });
+
+    await appointmentRepo.markReminderSent(appointment.id);
+  }
+
+  return { remindersSent: appointments.length };
+}
+
+/** Intended to be invoked by the /api/cron/expired-appointments route. */
+export async function expireStaleAppointmentsService() {
+  const expired = await appointmentRepo.findExpiredPendingAppointments(
+    new Date()
+  );
+
+  for (const appointment of expired) {
+    const updated = await appointmentRepo.updateAppointmentStatus(
+      appointment.id,
+      "CANCELLED"
+    );
+    const dateTime = formatDateTime(updated.scheduledAt);
+
+    await notifyUser({
+      userId: updated.patient.userId,
+      type: "APPOINTMENT_CANCELLED",
+      title: "Appointment expired",
+      message: `Your appointment request for ${dateTime} was never confirmed and has been cancelled.`,
+      email: {
+        to: updated.patient.user.email,
+        ...appointmentCancellationEmail({
+          patientName: updated.patient.user.name,
+          doctorName: updated.doctor.user.name,
+          dateTime,
+        }),
+      },
+    });
+
+    await writeAuditLog({
+      action: "STATUS_CHANGE",
+      entityType: "Appointment",
+      entityId: appointment.id,
+      metadata: { from: "PENDING", to: "CANCELLED", reason: "expired" },
+    });
+  }
+
+  return { expired: expired.length };
 }
