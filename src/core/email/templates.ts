@@ -20,17 +20,6 @@ export function welcomeEmail(name: string): EmailTemplate {
   };
 }
 
-export function emailVerificationEmail(verificationUrl: string): EmailTemplate {
-  return {
-    subject: "Verify your HealthCard email address",
-    html: layout(
-      "Verify your email",
-      `<p>Please confirm your email address to activate your HealthCard account.</p>
-       <p><a href="${verificationUrl}" style="background:#171717;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;">Verify Email</a></p>`
-    ),
-  };
-}
-
 export function passwordResetEmail(resetUrl: string): EmailTemplate {
   return {
     subject: "Reset your HealthCard password",

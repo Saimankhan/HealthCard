@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { CheckCircle2 } from "lucide-react";
 
 import { authClient } from "@/core/auth/auth-client";
 import { Button } from "@/components/ui/button";
@@ -34,8 +34,8 @@ const registerSchema = z.object({
 });
 
 export function RegisterForm() {
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
 
   const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
@@ -48,7 +48,6 @@ export function RegisterForm() {
       name: values.name,
       email: values.email,
       password: values.password,
-      callbackURL: "/verify-email",
     });
     setIsSubmitting(false);
 
@@ -57,26 +56,9 @@ export function RegisterForm() {
       return;
     }
 
-    setSubmitted(true);
-  }
-
-  if (submitted) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-          <CheckCircle2 className="text-primary size-10" />
-          <h2 className="text-lg font-semibold">Check your email</h2>
-          <p className="text-muted-foreground text-sm">
-            We&apos;ve sent a verification link to your email address. Verify it
-            to activate your account, then log in.
-          </p>
-          <Button
-            className="mt-2"
-            render={<Link href="/login">Go to login</Link>}
-          />
-        </CardContent>
-      </Card>
-    );
+    toast.success("Account created!");
+    router.push("/patient");
+    router.refresh();
   }
 
   return (

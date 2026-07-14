@@ -9,7 +9,6 @@ import { z } from "zod";
 import { toast } from "sonner";
 
 import { authClient } from "@/core/auth/auth-client";
-import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,7 +37,6 @@ const loginSchema = z.object({
 export function LoginForm() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -47,7 +45,6 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof loginSchema>) {
     setIsSubmitting(true);
-    setUnverifiedEmail(null);
     const { error } = await authClient.signIn.email({
       email: values.email,
       password: values.password,
@@ -56,9 +53,6 @@ export function LoginForm() {
     setIsSubmitting(false);
 
     if (error) {
-      if (error.code === "EMAIL_NOT_VERIFIED") {
-        setUnverifiedEmail(values.email);
-      }
       toast.error(error.message ?? "Unable to log in. Check your credentials.");
       return;
     }
@@ -66,22 +60,6 @@ export function LoginForm() {
     toast.success("Welcome back!");
     router.push("/patient");
     router.refresh();
-  }
-
-  async function resendVerification() {
-    if (!unverifiedEmail) return;
-    try {
-      await apiFetch("/api/auth/send-verification-email", {
-        method: "POST",
-        body: JSON.stringify({
-          email: unverifiedEmail,
-          callbackURL: "/verify-email",
-        }),
-      });
-      toast.success("Verification email sent.");
-    } catch {
-      toast.error("Unable to resend verification email.");
-    }
   }
 
   return (
@@ -159,15 +137,6 @@ export function LoginForm() {
             <Button type="submit" disabled={isSubmitting} className="mt-2">
               {isSubmitting ? "Logging in..." : "Log in"}
             </Button>
-            {unverifiedEmail && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={resendVerification}
-              >
-                Resend verification email
-              </Button>
-            )}
           </form>
         </Form>
         <p className="text-muted-foreground mt-6 text-center text-sm">

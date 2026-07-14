@@ -5,11 +5,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/core/db/prisma";
 import { serverEnv } from "@/core/config/env.server";
 import { sendEmail } from "@/core/email/mailer";
-import {
-  emailVerificationEmail,
-  passwordResetEmail,
-  welcomeEmail,
-} from "@/core/email/templates";
+import { passwordResetEmail, welcomeEmail } from "@/core/email/templates";
 import { authSecondaryStorage } from "@/core/auth/secondary-storage";
 import { createHealthCard } from "@/features/healthcard/repository/health-card.repository";
 import { createAuditLog } from "@/features/audit-logs/repository/audit-log.repository";
@@ -30,21 +26,14 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    // Local-demo-only project: skip the verification-email round trip and
+    // sign users in immediately after registration.
+    requireEmailVerification: false,
+    autoSignIn: true,
     minPasswordLength: 8,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       const { subject, html } = passwordResetEmail(url);
-      await sendEmail({ to: user.email, subject, html });
-    },
-  },
-  emailVerification: {
-    sendVerificationEmail: async ({ user, url }) => {
-      const { subject, html } = emailVerificationEmail(url);
-      await sendEmail({ to: user.email, subject, html });
-    },
-    afterEmailVerification: async (user) => {
-      const { subject, html } = welcomeEmail(user.name);
       await sendEmail({ to: user.email, subject, html });
     },
   },
@@ -75,6 +64,8 @@ export const auth = betterAuth({
             });
             await createHealthCard(patient.id);
           }
+          const { subject, html } = welcomeEmail(user.name);
+          await sendEmail({ to: user.email, subject, html });
         },
       },
     },
