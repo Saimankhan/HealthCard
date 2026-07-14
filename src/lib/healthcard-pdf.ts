@@ -1,5 +1,3 @@
-import { jsPDF } from "jspdf";
-
 import { formatDate, formatEnumLabel } from "@/lib/format";
 
 export interface HealthCardPdfData {
@@ -32,6 +30,7 @@ async function loadImageAsDataUrl(url: string): Promise<string> {
 }
 
 export async function downloadHealthCardPdf(card: HealthCardPdfData) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const marginX = 48;
   let y = 56;

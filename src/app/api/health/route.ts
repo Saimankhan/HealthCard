@@ -1,14 +1,16 @@
-import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+import { withErrorHandling } from "@/core/api/handler";
+import { errorResponse, successResponse } from "@/core/api/response";
 import { prisma } from "@/core/db/prisma";
 
-export async function GET() {
+async function healthCheckHandler(_request: NextRequest) {
   try {
     await prisma.$connect();
-    return NextResponse.json({ status: "ok", db: "connected" });
+    return successResponse({ status: "ok", db: "connected" });
   } catch (error) {
-    return NextResponse.json(
-      { status: "error", message: (error as Error).message },
-      { status: 500 }
-    );
+    return errorResponse((error as Error).message, 500, "DATABASE_ERROR");
   }
 }
+
+export const GET = withErrorHandling(healthCheckHandler);

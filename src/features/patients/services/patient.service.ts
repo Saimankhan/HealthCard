@@ -4,11 +4,11 @@ import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import { CACHE_TTL, getOrSetCache, invalidateCache } from "@/core/cache/cache";
+import { doctorHasTreatedPatient } from "@/core/auth/ownership";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import { createHealthCard } from "@/features/healthcard/repository/health-card.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
 import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
-import { existsAppointmentForDoctorAndPatient } from "@/features/appointments/repository/appointment.repository";
 import type {
   CreatePatientInput,
   ListPatientsQuery,
@@ -23,14 +23,11 @@ async function assertReadAccess(session: Session, patient: PatientRecord) {
   const role = session.user.role;
   if (isAdminRole(role)) return;
   if (role === "PATIENT" && patient.userId === session.user.id) return;
-  if (role === "DOCTOR") {
-    const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
-    if (
-      doctor &&
-      (await existsAppointmentForDoctorAndPatient(doctor.id, patient.id))
-    ) {
-      return;
-    }
+  if (
+    role === "DOCTOR" &&
+    (await doctorHasTreatedPatient(session.user.id, patient.id))
+  ) {
+    return;
   }
   throw new ForbiddenError();
 }

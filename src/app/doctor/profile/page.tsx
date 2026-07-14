@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { getCurrentSession } from "@/core/auth/rbac";
 import { getOwnDoctorProfileService } from "@/features/doctors/services/doctor.service";
 import { getUserByIdService } from "@/features/users/services/user.service";
-import { DoctorProfileForm } from "@/components/doctor/profile-form";
+import {
+  DoctorProfileForm,
+  type AvailabilitySlot,
+} from "@/components/doctor/profile-form";
 
 export const metadata: Metadata = { title: "Profile - HealthCard" };
 
@@ -36,7 +39,7 @@ export default async function DoctorProfilePage() {
             : null,
           phone: doctor.phone,
           availability: Array.isArray(doctor.availability)
-            ? (doctor.availability as never[])
+            ? (doctor.availability as unknown as AvailabilitySlot[])
             : null,
           specializationIds: doctor.specializations.map(
             (s) => s.specialization.id

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Prisma/Upstash clients only validate config shape at import time and
+# connect lazily on first query — none of these checks perform real
+# network I/O, so build-time-only dummy values (matching vitest.config.ts)
+# are sufficient here. Real deployments must supply real secrets.
+env:
+  NODE_ENV: production
+  DATABASE_URL: postgresql://user:pass@localhost:5432/ci
+  BETTER_AUTH_SECRET: ci-secret-at-least-32-characters-long
+  BETTER_AUTH_URL: http://localhost:3000
+  UPSTASH_REDIS_REST_URL: https://example.upstash.io
+  UPSTASH_REDIS_REST_TOKEN: ci-token
+  R2_ACCOUNT_ID: ci-account
+  R2_ACCESS_KEY_ID: ci-key
+  R2_SECRET_ACCESS_KEY: ci-secret
+  R2_BUCKET_NAME: ci-bucket
+  R2_ENDPOINT: https://example-r2.example.com
+  SMTP_HOST: smtp.example.com
+  SMTP_PORT: "587"
+  SMTP_USER: ci-user
+  SMTP_PASS: ci-pass
+  STRIPE_SECRET_KEY: sk_test_dummy
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_dummy
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

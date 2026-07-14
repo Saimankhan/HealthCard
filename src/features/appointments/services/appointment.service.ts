@@ -423,6 +423,24 @@ export async function rescheduleAppointmentService(
 }
 
 const REMINDER_WINDOW_HOURS = 24;
+const CRON_CONCURRENCY = 20;
+
+/**
+ * Runs `fn` over `items` with bounded concurrency instead of either a fully
+ * sequential loop (slow, and a large backlog can blow a cron route's time
+ * limit) or unbounded `Promise.allSettled` over everything at once (spikes
+ * concurrent DB/email/SMS calls). Failures are isolated per item.
+ */
+async function runInBatches<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    await Promise.allSettled(batch.map(fn));
+  }
+}
 
 /** Intended to be invoked by the /api/cron/appointment-reminders route. */
 export async function sendAppointmentRemindersService() {
@@ -435,7 +453,7 @@ export async function sendAppointmentRemindersService() {
     windowEnd
   );
 
-  for (const appointment of appointments) {
+  await runInBatches(appointments, CRON_CONCURRENCY, async (appointment) => {
     const dateTime = formatDateTime(appointment.scheduledAt);
     const { subject, html } = appointmentReminderEmail({
       patientName: appointment.patient.user.name,
@@ -463,7 +481,7 @@ export async function sendAppointmentRemindersService() {
     });
 
     await appointmentRepo.markReminderSent(appointment.id);
-  }
+  });
 
   return { remindersSent: appointments.length };
 }
@@ -474,7 +492,7 @@ export async function expireStaleAppointmentsService() {
     new Date()
   );
 
-  for (const appointment of expired) {
+  await runInBatches(expired, CRON_CONCURRENCY, async (appointment) => {
     const updated = await appointmentRepo.updateAppointmentStatus(
       appointment.id,
       "CANCELLED"
@@ -502,7 +520,7 @@ export async function expireStaleAppointmentsService() {
       entityId: appointment.id,
       metadata: { from: "PENDING", to: "CANCELLED", reason: "expired" },
     });
-  }
+  });
 
   if (expired.length > 0) {
     await invalidateAppointmentCaches();

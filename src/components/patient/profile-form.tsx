@@ -102,8 +102,10 @@ export function ProfileForm({
     resolver: zodResolver(healthInfoSchema),
     defaultValues: {
       dateOfBirth: patient.dateOfBirth,
-      gender: (patient.gender ?? "") as never,
-      bloodGroup: (patient.bloodGroup ?? "") as never,
+      gender: (patient.gender as (typeof GENDER_OPTIONS)[number] | null) ?? "",
+      bloodGroup:
+        (patient.bloodGroup as (typeof BLOOD_GROUP_OPTIONS)[number] | null) ??
+        "",
       phone: patient.phone,
       address: patient.address,
       emergencyContactName: patient.emergencyContactName,

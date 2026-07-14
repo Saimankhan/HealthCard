@@ -27,7 +27,7 @@ import {
 const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const;
 type Day = (typeof DAYS)[number];
 
-type AvailabilitySlot = {
+export type AvailabilitySlot = {
   day: Day;
   startTime: string;
   endTime: string;

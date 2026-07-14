@@ -8,6 +8,8 @@ export const CACHE_TTL = {
   healthCardLookup: 120,
   patientList: 60,
   medicalHistory: 120,
+  departmentList: 300,
+  specializationList: 300,
 } as const;
 
 export async function getOrSetCache<T>(

@@ -1,9 +1,10 @@
-import { jsPDF } from "jspdf";
-
 import type { PrescriptionListItem } from "@/components/patient/prescriptions/types";
 import { formatDate } from "@/lib/format";
 
-export function downloadPrescriptionPdf(prescription: PrescriptionListItem) {
+export async function downloadPrescriptionPdf(
+  prescription: PrescriptionListItem
+) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const marginX = 48;
   let y = 56;

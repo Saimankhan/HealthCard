@@ -4,9 +4,10 @@ A digital healthcare management platform — patient/doctor/admin portals,
 appointment booking, prescriptions, medical records, a QR-verified digital
 HealthCard, and Stripe-backed payments.
 
-> **Status:** Phase 1 — project scaffolding & infrastructure configuration.
-> Business features (entities beyond auth, feature routes/services/UI) are
-> built in subsequent phases.
+> **Status:** Production-hardened. Full feature set (auth, patients, doctors,
+> admin, appointments, prescriptions, medical history/reports, Digital
+> HealthCard + QR verification, payments, notifications, analytics/reports,
+> report export) is complete, tested, and CI-gated.
 
 ## Tech stack
 
@@ -57,9 +58,11 @@ prisma/
   migrations/              generated SQL migrations
 ```
 
-Features scaffolded so far: `auth`, `users`, `patients`, `doctors`, `admin`,
-`appointments`, `prescriptions`, `medical-history`, `healthcard`, `payments`,
-`notifications`, `medical-reports`, `audit-logs`.
+Features: `auth`, `users`, `patients`, `doctors`, `admin`, `appointments`,
+`prescriptions`, `medical-history`, `medical-reports`, `healthcard` (with QR
+generation + public verification), `payments` (Stripe), `notifications`
+(email/SMS + in-app), `departments`, `reports` (analytics + CSV/PDF/Excel
+export), `audit-logs`.
 
 ## Getting started
 
@@ -94,20 +97,31 @@ Visit [http://localhost:3000](http://localhost:3000).
 
 ## Scripts
 
-| Script                 | Purpose                              |
-| ---------------------- | ------------------------------------ |
-| `npm run dev`          | Start the Next.js dev server         |
-| `npm run build`        | `prisma generate` + production build |
-| `npm run start`        | Start the production server          |
-| `npm run lint`         | ESLint                               |
-| `npm run format`       | Prettier — write                     |
-| `npm run format:check` | Prettier — check only                |
-| `npm run db:generate`  | Regenerate the Prisma client         |
-| `npm run db:migrate`   | Create + apply a dev migration       |
-| `npm run db:deploy`    | Apply migrations in production       |
-| `npm run db:studio`    | Open Prisma Studio                   |
+| Script                  | Purpose                              |
+| ----------------------- | ------------------------------------ |
+| `npm run dev`           | Start the Next.js dev server         |
+| `npm run build`         | `prisma generate` + production build |
+| `npm run start`         | Start the production server          |
+| `npm run lint`          | ESLint                               |
+| `npm run typecheck`     | `tsc --noEmit`                       |
+| `npm run test`          | Run the Vitest suite once            |
+| `npm run test:watch`    | Vitest in watch mode                 |
+| `npm run test:coverage` | Vitest with a coverage report        |
+| `npm run format`        | Prettier — write                     |
+| `npm run format:check`  | Prettier — check only                |
+| `npm run db:generate`   | Regenerate the Prisma client         |
+| `npm run db:migrate`    | Create + apply a dev migration       |
+| `npm run db:deploy`     | Apply migrations in production       |
+| `npm run db:studio`     | Open Prisma Studio                   |
 
 A Husky pre-commit hook runs `lint-staged` (ESLint + Prettier on staged files).
+
+## Continuous Integration
+
+Every push and pull request against `main` runs `.github/workflows/ci.yml`:
+`typecheck` → `lint` → `test` → `build`, using the same npm scripts as local
+development so a green CI run means the exact same checks you'd run
+yourself all passed.
 
 ## Docker
 

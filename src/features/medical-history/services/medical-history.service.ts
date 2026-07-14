@@ -4,6 +4,7 @@ import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import { CACHE_TTL, getOrSetCache, invalidateCache } from "@/core/cache/cache";
+import { doctorHasTreatedPatient } from "@/core/auth/ownership";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import * as medicalHistoryRepo from "@/features/medical-history/repository/medical-history.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
@@ -28,11 +29,7 @@ async function assertReadAccess(
   if (role === "PATIENT" && record.patient.userId === session.user.id) return;
   if (role === "DOCTOR") {
     if (record.doctor?.userId === session.user.id) return;
-    const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
-    if (
-      doctor &&
-      (await existsAppointmentForDoctorAndPatient(doctor.id, record.patientId))
-    ) {
+    if (await doctorHasTreatedPatient(session.user.id, record.patientId)) {
       return;
     }
   }

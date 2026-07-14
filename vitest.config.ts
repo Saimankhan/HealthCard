@@ -7,6 +7,15 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     setupFiles: ["./vitest.setup.ts"],
+    coverage: {
+      provider: "v8",
+      exclude: [
+        "src/generated/**",
+        "src/components/ui/**",
+        "**/*.test.ts",
+        "**/*.config.ts",
+      ],
+    },
     // Dummy values so env.server.ts/env.client.ts don't throw when a test
     // transitively imports a module that reads them — tests should never
     // depend on a real .env file being present.

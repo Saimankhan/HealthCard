@@ -122,6 +122,8 @@ export async function rescheduleAppointment(id: string, scheduledAt: Date) {
   });
 }
 
+const CRON_BATCH_LIMIT = 500;
+
 export async function findAppointmentsNeedingReminder(
   windowStart: Date,
   windowEnd: Date
@@ -133,6 +135,7 @@ export async function findAppointmentsNeedingReminder(
       scheduledAt: { gte: windowStart, lte: windowEnd },
     },
     include: appointmentInclude,
+    take: CRON_BATCH_LIMIT,
   });
 }
 
@@ -147,6 +150,7 @@ export async function findExpiredPendingAppointments(before: Date) {
   return prisma.appointment.findMany({
     where: { status: "PENDING", scheduledAt: { lt: before } },
     include: appointmentInclude,
+    take: CRON_BATCH_LIMIT,
   });
 }
 

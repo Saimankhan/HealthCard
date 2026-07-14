@@ -194,6 +194,7 @@ export async function markAllNotificationsReadService(session: Session) {
 }
 
 const BROADCAST_RATE_LIMIT = { limit: 5, windowSeconds: 60 };
+const BROADCAST_BATCH_SIZE = 100;
 
 /**
  * Fans out through notifyUser per recipient (rather than a bulk insert) so
@@ -218,17 +219,22 @@ export async function broadcastNotificationService(
   const recipients = await listUsersForBroadcast(input.role);
   const { subject, html } = adminAnnouncementEmail(input);
 
-  await Promise.allSettled(
-    recipients.map((user) =>
-      notifyUser({
-        userId: user.id,
-        type: "SYSTEM_ANNOUNCEMENT",
-        title: input.title,
-        message: input.message,
-        email: { to: user.email, subject, html },
-      })
-    )
-  );
+  // Chunked rather than one giant Promise.allSettled — bounds the number of
+  // concurrent email/SMS sends in flight for large recipient lists.
+  for (let i = 0; i < recipients.length; i += BROADCAST_BATCH_SIZE) {
+    const batch = recipients.slice(i, i + BROADCAST_BATCH_SIZE);
+    await Promise.allSettled(
+      batch.map((user) =>
+        notifyUser({
+          userId: user.id,
+          type: "SYSTEM_ANNOUNCEMENT",
+          title: input.title,
+          message: input.message,
+          email: { to: user.email, subject, html },
+        })
+      )
+    );
+  }
 
   return { count: recipients.length };
 }

@@ -2,8 +2,13 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { Session } from "@/core/auth/auth";
 import { isAdminRole } from "@/core/auth/roles";
-import { ForbiddenError, NotFoundError } from "@/core/api/errors";
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+} from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
+import { doctorHasTreatedPatient } from "@/core/auth/ownership";
 import {
   assertValidFileUpload,
   getSignedDownloadUrl,
@@ -33,11 +38,7 @@ async function assertReadAccess(session: Session, report: MedicalReportRecord) {
   if (role === "PATIENT" && report.patient.userId === session.user.id) return;
   if (role === "DOCTOR") {
     if (report.doctor?.userId === session.user.id) return;
-    const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
-    if (
-      doctor &&
-      (await existsAppointmentForDoctorAndPatient(doctor.id, report.patientId))
-    ) {
+    if (await doctorHasTreatedPatient(session.user.id, report.patientId)) {
       return;
     }
   }
@@ -50,6 +51,21 @@ function assertWriteAccess(session: Session, report: MedicalReportRecord) {
   if (role === "DOCTOR" && report.doctor?.userId === session.user.id) return;
   if (role === "PATIENT" && report.patient.userId === session.user.id) return;
   throw new ForbiddenError();
+}
+
+/**
+ * `fileKey` is client-supplied (returned earlier from `requestUploadUrlService`,
+ * but nothing stops a caller from submitting an arbitrary key they observed
+ * elsewhere). Without this check a caller with write access to *some* report
+ * could get a signed download URL minted for any object in the bucket by
+ * pointing a report's fileKey at it. Mirrors the same check already done for
+ * avatars in `confirmAvatarService`.
+ */
+function assertFileKeyOwnership(fileKey: string, patientId: string) {
+  const expectedPrefix = `${STORAGE_PREFIX.medicalReports}/${patientId}/`;
+  if (!fileKey.startsWith(expectedPrefix)) {
+    throw new BadRequestError("Invalid file key for this patient");
+  }
 }
 
 export async function requestUploadUrlService(
@@ -161,6 +177,8 @@ export async function createMedicalReportService(
   const patient = await patientRepo.findPatientById(input.patientId);
   if (!patient) throw new NotFoundError("Patient");
 
+  assertFileKeyOwnership(input.fileKey, input.patientId);
+
   const report = await medicalReportRepo.createMedicalReport({
     patient: { connect: { id: input.patientId } },
     ...(doctorId ? { doctor: { connect: { id: doctorId } } } : {}),
@@ -197,6 +215,9 @@ export async function updateMedicalReportService(
   if (!report) throw new NotFoundError("Medical report");
   assertWriteAccess(session, report);
 
+  if (input.fileKey) {
+    assertFileKeyOwnership(input.fileKey, report.patientId);
+  }
   if (input.fileKey && input.fileType) {
     assertValidFileUpload("medicalReports", input.fileType, input.fileSize);
   }
