@@ -7,6 +7,7 @@ import {
   NotFoundError,
 } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
+import { CACHE_TTL, getOrSetCache, invalidateCache } from "@/core/cache/cache";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
 import * as userRepo from "@/features/users/repository/user.repository";
@@ -17,16 +18,40 @@ import type {
   UpdateDoctorInput,
 } from "@/features/doctors/validation/doctor.validation";
 
+const DOCTOR_LIST_DEFAULT_CACHE_KEY = "cache:doctors:list:default";
+
+/** Only the unfiltered first-page/default-sized request is worth caching — anything with search/specializationId set is skipped to avoid unbounded cache-key growth. */
+function isDefaultDoctorListQuery(query: ListDoctorsQuery) {
+  return (
+    !query.search &&
+    !query.specializationId &&
+    query.page === 1 &&
+    query.pageSize === 100 &&
+    query.sortOrder === "asc"
+  );
+}
+
 export async function listDoctorsService(query: ListDoctorsQuery) {
   const { skip, take } = paginationSkipTake(query);
-  const { items, total } = await doctorRepo.listDoctors({
-    skip,
-    take,
-    sortOrder: query.sortOrder,
-    specializationId: query.specializationId,
-    search: query.search,
-  });
-  return { items, meta: paginationMeta(query, total) };
+  const fetcher = async () => {
+    const { items, total } = await doctorRepo.listDoctors({
+      skip,
+      take,
+      sortOrder: query.sortOrder,
+      specializationId: query.specializationId,
+      search: query.search,
+    });
+    return { items, meta: paginationMeta(query, total) };
+  };
+
+  if (isDefaultDoctorListQuery(query)) {
+    return getOrSetCache(
+      DOCTOR_LIST_DEFAULT_CACHE_KEY,
+      CACHE_TTL.doctorList,
+      fetcher
+    );
+  }
+  return fetcher();
 }
 
 export async function getDoctorByIdService(id: string) {
@@ -75,6 +100,8 @@ export async function createDoctorService(
     input.specializationIds ?? []
   );
 
+  await invalidateCache(DOCTOR_LIST_DEFAULT_CACHE_KEY);
+
   await writeAuditLog({
     actorId,
     action: "CREATE",
@@ -113,6 +140,8 @@ export async function updateDoctorService(
     input.specializationIds
   );
 
+  await invalidateCache(DOCTOR_LIST_DEFAULT_CACHE_KEY);
+
   await writeAuditLog({
     actorId: session.user.id,
     action: "UPDATE",
@@ -130,6 +159,8 @@ export async function deleteDoctorService(session: Session, id: string) {
   if (!doctor) throw new NotFoundError("Doctor");
 
   const deleted = await doctorRepo.softDeleteDoctor(id);
+  await invalidateCache(DOCTOR_LIST_DEFAULT_CACHE_KEY);
+
   await writeAuditLog({
     actorId: session.user.id,
     action: "DELETE",

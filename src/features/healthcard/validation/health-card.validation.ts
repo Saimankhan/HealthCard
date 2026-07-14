@@ -17,8 +17,14 @@ export const listHealthCardsQuerySchema = paginationQuerySchema.extend({
   status: healthCardStatusSchema.optional(),
 });
 
+export const reissueHealthCardSchema = z.object({
+  newCardNumber: z.boolean().default(false),
+  expiresAt: z.coerce.date().optional(),
+});
+
 export type IssueHealthCardInput = z.infer<typeof issueHealthCardSchema>;
 export type UpdateHealthCardStatusInput = z.infer<
   typeof updateHealthCardStatusSchema
 >;
 export type ListHealthCardsQuery = z.infer<typeof listHealthCardsQuerySchema>;
+export type ReissueHealthCardInput = z.infer<typeof reissueHealthCardSchema>;

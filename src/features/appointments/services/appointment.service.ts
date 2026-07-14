@@ -8,6 +8,11 @@ import {
   NotFoundError,
 } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
+import { CACHE_TTL, getOrSetCache, invalidateCache } from "@/core/cache/cache";
+import {
+  DASHBOARD_CACHE_INVALIDATION_DAYS,
+  dashboardAggregatesCacheKey,
+} from "@/features/reports/services/report.service";
 import { formatDateTime } from "@/lib/format";
 import {
   appointmentCancellationEmail,
@@ -85,6 +90,27 @@ function assertReadAccess(session: Session, appointment: AppointmentRecord) {
   throw new ForbiddenError();
 }
 
+const APPOINTMENT_LIST_DEFAULT_CACHE_KEY = "cache:appointments:list:default";
+
+/** Only the unfiltered admin first-page/default-sized request is cached — any filter (including patient/doctor scoping) is skipped to avoid unbounded cache-key growth. */
+function isDefaultAppointmentListQuery(
+  query: ListAppointmentsQuery,
+  patientId: string | undefined,
+  doctorId: string | undefined
+) {
+  return (
+    !patientId &&
+    !doctorId &&
+    !query.status &&
+    !query.from &&
+    !query.to &&
+    !query.search &&
+    query.page === 1 &&
+    query.pageSize === 100 &&
+    query.sortOrder === "desc"
+  );
+}
+
 export async function listAppointmentsService(
   session: Session,
   query: ListAppointmentsQuery
@@ -104,18 +130,36 @@ export async function listAppointmentsService(
     doctorId = doctor.id;
   }
 
-  const { items, total } = await appointmentRepo.listAppointments({
-    skip,
-    take,
-    sortOrder: query.sortOrder,
-    status: query.status,
-    patientId,
-    doctorId,
-    from: query.from,
-    to: query.to,
-  });
+  const fetcher = async () => {
+    const { items, total } = await appointmentRepo.listAppointments({
+      skip,
+      take,
+      sortOrder: query.sortOrder,
+      status: query.status,
+      patientId,
+      doctorId,
+      from: query.from,
+      to: query.to,
+      search: query.search,
+    });
+    return { items, meta: paginationMeta(query, total) };
+  };
 
-  return { items, meta: paginationMeta(query, total) };
+  if (isDefaultAppointmentListQuery(query, patientId, doctorId)) {
+    return getOrSetCache(
+      APPOINTMENT_LIST_DEFAULT_CACHE_KEY,
+      CACHE_TTL.appointments,
+      fetcher
+    );
+  }
+  return fetcher();
+}
+
+async function invalidateAppointmentCaches() {
+  await invalidateCache(
+    APPOINTMENT_LIST_DEFAULT_CACHE_KEY,
+    ...DASHBOARD_CACHE_INVALIDATION_DAYS.map(dashboardAggregatesCacheKey)
+  );
 }
 
 export async function getAppointmentByIdService(session: Session, id: string) {
@@ -185,6 +229,8 @@ export async function createAppointmentService(
     });
   }
 
+  await invalidateAppointmentCaches();
+
   await writeAuditLog({
     actorId: session.user.id,
     action: "CREATE",
@@ -225,6 +271,7 @@ export async function updateAppointmentStatusService(
   }
 
   const updated = await appointmentRepo.updateAppointmentStatus(id, status);
+  await invalidateAppointmentCaches();
 
   const notificationCopy: Partial<
     Record<
@@ -346,6 +393,7 @@ export async function rescheduleAppointmentService(
     id,
     input.scheduledAt
   );
+  await invalidateAppointmentCaches();
 
   await createNotification({
     userId: updated.patient.userId,
@@ -454,6 +502,10 @@ export async function expireStaleAppointmentsService() {
       entityId: appointment.id,
       metadata: { from: "PENDING", to: "CANCELLED", reason: "expired" },
     });
+  }
+
+  if (expired.length > 0) {
+    await invalidateAppointmentCaches();
   }
 
   return { expired: expired.length };

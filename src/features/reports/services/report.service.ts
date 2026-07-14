@@ -4,6 +4,7 @@ import { listAuditLogsService } from "@/features/audit-logs/services/audit-log.s
 import { listAuditLogsQuerySchema } from "@/features/audit-logs/validation/audit-log.validation";
 import { listOwnNotificationsService } from "@/features/notifications/services/notification.service";
 import { listNotificationsQuerySchema } from "@/features/notifications/validation/notification.validation";
+import { CACHE_TTL, getOrSetCache } from "@/core/cache/cache";
 import type { Session } from "@/core/auth/auth";
 import type { ReportRangeQuery } from "@/features/reports/validation/report.validation";
 
@@ -25,31 +26,119 @@ function serializeDayTotals(rows: { day: Date; total: string }[]) {
   }));
 }
 
+function sumCountsInWindow(
+  rows: { day: Date; count: bigint }[],
+  from: Date,
+  to: Date
+): number {
+  return rows
+    .filter((row) => row.day >= from && row.day < to)
+    .reduce((sum, row) => sum + Number(row.count), 0);
+}
+
+function sumTotalsInWindow(
+  rows: { day: Date; total: string }[],
+  from: Date,
+  to: Date
+): number {
+  return rows
+    .filter((row) => row.day >= from && row.day < to)
+    .reduce((sum, row) => sum + Number(row.total), 0);
+}
+
+/** Period-over-period % change, rounded to one decimal. 0→positive reads as +100%. */
+function percentChange(previous: number, current: number): number {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+/** Exported so mutating services elsewhere can invalidate the common days=14/30 dashboard keys. */
+export function dashboardAggregatesCacheKey(days: number) {
+  return `cache:dashboard:overview:${days}`;
+}
+
+export const DASHBOARD_CACHE_INVALIDATION_DAYS = [14, 30] as const;
+
+/**
+ * Everything here is global (not session-scoped), unlike the caller's
+ * per-user notifications feed — keeping that split is what makes this safe
+ * to cache: a naive whole-response cache would leak one admin's
+ * notifications to the next admin who hits the dashboard within the TTL.
+ */
+async function getCachedDashboardAggregates(days: number) {
+  return getOrSetCache(
+    dashboardAggregatesCacheKey(days),
+    CACHE_TTL.dashboard,
+    async () => {
+      const now = new Date();
+      const since = sinceDaysAgo(days);
+      // Fetch a 2x window so the current period can be compared against the
+      // one immediately before it for growth %, without a second round trip.
+      const previousWindowStart = sinceDaysAgo(days * 2);
+
+      const [
+        counts,
+        appointmentsByStatus,
+        appointmentVolumeFull,
+        revenueByDayFull,
+        registrationsFull,
+        recentActivity,
+      ] = await Promise.all([
+        reportRepo.getOverviewCounts(),
+        reportRepo.getAppointmentCountsByStatus(),
+        reportRepo.getAppointmentVolumeByDay(previousWindowStart),
+        reportRepo.getRevenueByDay(previousWindowStart),
+        reportRepo.getPatientRegistrationsByDay(previousWindowStart),
+        listAuditLogsService(
+          listAuditLogsQuerySchema.parse({
+            page: 1,
+            pageSize: 8,
+            sortOrder: "desc",
+          })
+        ),
+      ]);
+
+      const appointmentVolume = appointmentVolumeFull.filter(
+        (row) => row.day >= since
+      );
+      const revenueByDay = revenueByDayFull.filter((row) => row.day >= since);
+
+      const growth = {
+        patients: percentChange(
+          sumCountsInWindow(registrationsFull, previousWindowStart, since),
+          sumCountsInWindow(registrationsFull, since, now)
+        ),
+        appointments: percentChange(
+          sumCountsInWindow(appointmentVolumeFull, previousWindowStart, since),
+          sumCountsInWindow(appointmentVolumeFull, since, now)
+        ),
+        revenue: percentChange(
+          sumTotalsInWindow(revenueByDayFull, previousWindowStart, since),
+          sumTotalsInWindow(revenueByDayFull, since, now)
+        ),
+      };
+
+      return {
+        ...counts,
+        appointmentsByStatus: appointmentsByStatus.map((row) => ({
+          status: row.status,
+          count: row._count._all,
+        })),
+        appointmentVolume: serializeDayCounts(appointmentVolume),
+        revenueByDay: serializeDayTotals(revenueByDay),
+        recentActivity: recentActivity.items,
+        growth,
+      };
+    }
+  );
+}
+
 export async function getDashboardOverviewService(
   session: Session,
   query: ReportRangeQuery
 ) {
-  const since = sinceDaysAgo(query.days);
-
-  const [
-    counts,
-    appointmentsByStatus,
-    appointmentVolume,
-    revenueByDay,
-    recentActivity,
-    notifications,
-  ] = await Promise.all([
-    reportRepo.getOverviewCounts(),
-    reportRepo.getAppointmentCountsByStatus(),
-    reportRepo.getAppointmentVolumeByDay(since),
-    reportRepo.getRevenueByDay(since),
-    listAuditLogsService(
-      listAuditLogsQuerySchema.parse({
-        page: 1,
-        pageSize: 8,
-        sortOrder: "desc",
-      })
-    ),
+  const [aggregates, notifications] = await Promise.all([
+    getCachedDashboardAggregates(query.days),
     listOwnNotificationsService(
       session,
       listNotificationsQuerySchema.parse({
@@ -60,17 +149,7 @@ export async function getDashboardOverviewService(
     ),
   ]);
 
-  return {
-    ...counts,
-    appointmentsByStatus: appointmentsByStatus.map((row) => ({
-      status: row.status,
-      count: row._count._all,
-    })),
-    appointmentVolume: serializeDayCounts(appointmentVolume),
-    revenueByDay: serializeDayTotals(revenueByDay),
-    recentActivity: recentActivity.items,
-    notifications: notifications.items,
-  };
+  return { ...aggregates, notifications: notifications.items };
 }
 
 export async function getPatientReportService(query: ReportRangeQuery) {
@@ -152,6 +231,53 @@ export async function getAppointmentReportService(query: ReportRangeQuery) {
     })),
     volume: serializeDayCounts(volume),
   };
+}
+
+export async function getPrescriptionReportService(query: ReportRangeQuery) {
+  const since = sinceDaysAgo(query.days);
+
+  const [volume, countsByDoctor, doctors] = await Promise.all([
+    reportRepo.getPrescriptionVolumeByDay(since),
+    reportRepo.getPrescriptionCountsByDoctor(),
+    reportRepo.listDoctorsForReport(),
+  ]);
+
+  const doctorNameById = new Map(doctors.map((d) => [d.id, d.user.name]));
+  const total = countsByDoctor.reduce((sum, row) => sum + row._count._all, 0);
+
+  const byDoctor = countsByDoctor
+    .map((row) => ({
+      doctorId: row.doctorId,
+      doctorName: doctorNameById.get(row.doctorId) ?? "Unknown",
+      count: row._count._all,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
+  return {
+    total,
+    byDoctor,
+    volume: serializeDayCounts(volume),
+  };
+}
+
+export async function getDauReportService(query: ReportRangeQuery) {
+  const since = sinceDaysAgo(query.days);
+  const rows = await reportRepo.getDailyActiveUserCounts(since);
+  const series = serializeDayCounts(rows);
+  const today = series.at(-1)?.count ?? 0;
+
+  return { series, today };
+}
+
+export async function getSystemHealthService() {
+  const start = Date.now();
+  try {
+    await reportRepo.pingDatabase();
+    return { status: "ok" as const, latencyMs: Date.now() - start };
+  } catch {
+    return { status: "error" as const, latencyMs: Date.now() - start };
+  }
 }
 
 export async function getPaymentReportService(query: ReportRangeQuery) {

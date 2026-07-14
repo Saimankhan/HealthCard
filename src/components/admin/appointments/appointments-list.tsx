@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Search } from "lucide-react";
 
-import { apiFetch, apiFetchWithMeta } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
+import { useListQuery } from "@/hooks/use-list-query";
 import { formatDateTime } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,6 @@ const NEXT_STATUSES: Record<string, string[]> = {
 };
 
 export function AdminAppointmentsList() {
-  const [items, setItems] = useState<AppointmentListItem[] | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [actingId, setActingId] = useState<string | null>(null);
@@ -55,38 +55,19 @@ export function AdminAppointmentsList() {
     useState<AppointmentListItem | null>(null);
   const [newDateTime, setNewDateTime] = useState("");
 
-  async function load() {
-    try {
-      const params = new URLSearchParams({
-        sortOrder: "desc",
-        pageSize: "100",
-      });
-      if (statusFilter !== "ALL") params.set("status", statusFilter);
-      const { data } = await apiFetchWithMeta<AppointmentListItem[]>(
-        `/api/appointments?${params.toString()}`
-      );
-      setItems(data);
-    } catch {
-      toast.error("Unable to load appointments");
-      setItems([]);
-    }
-  }
+  const {
+    items,
+    error,
+    reload: load,
+  } = useListQuery<AppointmentListItem, Record<string, string>>({
+    endpoint: "/api/appointments",
+    filters: { search, status: statusFilter },
+    baseParams: { sortOrder: "desc", pageSize: "100" },
+  });
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
-
-  const filtered = useMemo(() => {
-    if (!items) return null;
-    const query = search.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter(
-      (a) =>
-        a.patient.user.name.toLowerCase().includes(query) ||
-        a.doctor.user.name.toLowerCase().includes(query)
-    );
-  }, [items, search]);
+    if (error) toast.error("Unable to load appointments");
+  }, [error]);
 
   async function updateStatus(id: string, status: string) {
     setActingId(id);
@@ -161,12 +142,12 @@ export function AdminAppointmentsList() {
         </Select>
       </div>
 
-      {filtered === null ? (
+      {items === null ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : items.length === 0 ? (
         <Card>
           <CardContent>
             <EmptyState message="No appointments found." />
@@ -174,7 +155,7 @@ export function AdminAppointmentsList() {
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          {filtered.map((appt) => {
+          {items.map((appt) => {
             const nextOptions = NEXT_STATUSES[appt.status] ?? [];
             const canModify = nextOptions.length > 0;
             return (

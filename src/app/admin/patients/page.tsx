@@ -13,7 +13,7 @@ export default function AdminPatientsPage() {
           View and manage all patient records.
         </p>
       </div>
-      <PatientsList basePath="/admin/patients" />
+      <PatientsList basePath="/admin/patients" showAdvancedFilters />
     </div>
   );
 }

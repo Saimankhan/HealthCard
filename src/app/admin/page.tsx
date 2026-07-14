@@ -9,6 +9,8 @@ import {
   UserPlus,
   ScrollText,
   BarChart3,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 
 import { getCurrentSession } from "@/core/auth/rbac";
@@ -16,6 +18,7 @@ import { getDashboardOverviewService } from "@/features/reports/services/report.
 import { reportRangeQuerySchema } from "@/features/reports/validation/report.validation";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { SectionCard, EmptyState } from "@/components/patient/section-card";
 import { StatusBadge } from "@/components/patient/status-badge";
@@ -26,6 +29,24 @@ import {
 } from "@/components/admin/dashboard-charts";
 
 export const metadata: Metadata = { title: "Dashboard - HealthCard Admin" };
+
+function GrowthBadge({ value }: { value: number }) {
+  const isPositive = value >= 0;
+  return (
+    <Badge
+      variant={isPositive ? "default" : "destructive"}
+      className="gap-1 text-[10px]"
+    >
+      {isPositive ? (
+        <TrendingUp className="size-3" />
+      ) : (
+        <TrendingDown className="size-3" />
+      )}
+      {isPositive ? "+" : ""}
+      {value}%
+    </Badge>
+  );
+}
 
 export default async function AdminDashboardPage() {
   const session = await getCurrentSession();
@@ -59,7 +80,12 @@ export default async function AdminDashboardPage() {
           <CardContent className="flex items-center gap-3 py-5">
             <HeartPulse className="text-primary size-8 shrink-0" />
             <div>
-              <p className="text-2xl font-semibold">{overview.totalPatients}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-semibold">
+                  {overview.totalPatients}
+                </p>
+                <GrowthBadge value={overview.growth.patients} />
+              </div>
               <p className="text-muted-foreground text-xs">Total patients</p>
             </div>
           </CardContent>
@@ -77,9 +103,12 @@ export default async function AdminDashboardPage() {
           <CardContent className="flex items-center gap-3 py-5">
             <CalendarDays className="text-primary size-8 shrink-0" />
             <div>
-              <p className="text-2xl font-semibold">
-                {overview.totalAppointments}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-semibold">
+                  {overview.totalAppointments}
+                </p>
+                <GrowthBadge value={overview.growth.appointments} />
+              </div>
               <p className="text-muted-foreground text-xs">Appointments</p>
             </div>
           </CardContent>
@@ -88,9 +117,12 @@ export default async function AdminDashboardPage() {
           <CardContent className="flex items-center gap-3 py-5">
             <DollarSign className="text-primary size-8 shrink-0" />
             <div>
-              <p className="text-2xl font-semibold">
-                {formatCurrency(overview.totalRevenue)}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(overview.totalRevenue)}
+                </p>
+                <GrowthBadge value={overview.growth.revenue} />
+              </div>
               <p className="text-muted-foreground text-xs">Revenue</p>
             </div>
           </CardContent>

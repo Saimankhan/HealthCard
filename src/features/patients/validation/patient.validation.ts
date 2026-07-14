@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@/core/api/pagination";
-import { userIdSchema } from "@/core/api/schemas";
+import { entityIdSchema, userIdSchema } from "@/core/api/schemas";
 
 const genderSchema = z.enum(["MALE", "FEMALE", "OTHER"]);
 const bloodGroupSchema = z.enum([
@@ -12,6 +12,13 @@ const bloodGroupSchema = z.enum([
   "AB_NEGATIVE",
   "O_POSITIVE",
   "O_NEGATIVE",
+]);
+const appointmentStatusSchema = z.enum([
+  "PENDING",
+  "CONFIRMED",
+  "COMPLETED",
+  "CANCELLED",
+  "NO_SHOW",
 ]);
 
 export const createPatientSchema = z.object({
@@ -32,6 +39,10 @@ export const updatePatientSchema = createPatientSchema
 export const listPatientsQuerySchema = paginationQuerySchema.extend({
   gender: genderSchema.optional(),
   bloodGroup: bloodGroupSchema.optional(),
+  phone: z.string().trim().min(1).optional(),
+  healthCardNumber: z.string().trim().min(1).optional(),
+  doctorId: entityIdSchema.optional(),
+  appointmentStatus: appointmentStatusSchema.optional(),
 });
 
 export type CreatePatientInput = z.infer<typeof createPatientSchema>;

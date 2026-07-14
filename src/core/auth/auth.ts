@@ -1,5 +1,4 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
@@ -12,10 +11,8 @@ import {
   welcomeEmail,
 } from "@/core/email/templates";
 import { authSecondaryStorage } from "@/core/auth/secondary-storage";
-
-function generateHealthCardNumber(): string {
-  return `HC-${new Date().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
+import { createHealthCard } from "@/features/healthcard/repository/health-card.repository";
+import { createAuditLog } from "@/features/audit-logs/repository/audit-log.repository";
 
 export const auth = betterAuth({
   secret: serverEnv.BETTER_AUTH_SECRET,
@@ -76,16 +73,7 @@ export const auth = betterAuth({
             const patient = await prisma.patient.create({
               data: { userId: user.id },
             });
-            await prisma.healthCard.create({
-              data: {
-                patientId: patient.id,
-                cardNumber: generateHealthCardNumber(),
-                verificationToken: randomUUID(),
-                expiresAt: new Date(
-                  new Date().setFullYear(new Date().getFullYear() + 3)
-                ),
-              },
-            });
+            await createHealthCard(patient.id);
           }
         },
       },
@@ -103,6 +91,14 @@ export const auth = betterAuth({
           if (user?.deletedAt || user?.suspendedAt) {
             return false;
           }
+        },
+        after: async (session) => {
+          await createAuditLog({
+            actorId: session.userId,
+            action: "LOGIN",
+            entityType: "User",
+            entityId: session.userId,
+          });
         },
       },
     },

@@ -3,6 +3,7 @@ import type { Session } from "@/core/auth/auth";
 import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
+import { CACHE_TTL, getOrSetCache, invalidateCache } from "@/core/cache/cache";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import { createHealthCard } from "@/features/healthcard/repository/health-card.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
@@ -54,29 +55,66 @@ export async function getOwnPatientProfileService(session: Session) {
   return patient;
 }
 
+const PATIENT_LIST_DEFAULT_CACHE_KEY = "cache:patients:list:default";
+
+/** Only the unfiltered admin first-page/default-sized request is cached — any filter (including doctor scoping) is skipped to avoid unbounded cache-key growth. */
+function isDefaultPatientListQuery(
+  query: ListPatientsQuery,
+  doctorId: string | undefined
+) {
+  return (
+    !doctorId &&
+    !query.search &&
+    !query.gender &&
+    !query.bloodGroup &&
+    !query.phone &&
+    !query.healthCardNumber &&
+    !query.appointmentStatus &&
+    query.page === 1 &&
+    query.pageSize === 100 &&
+    query.sortOrder === "asc"
+  );
+}
+
 export async function listPatientsService(
   session: Session,
   query: ListPatientsQuery
 ) {
   const { skip, take } = paginationSkipTake(query);
 
-  let doctorId: string | undefined;
+  // Doctors are always scoped to their own patients regardless of what
+  // doctorId they pass; admins may filter by any doctor.
+  let doctorId = query.doctorId;
   if (session.user.role === "DOCTOR") {
     const doctor = await doctorRepo.findDoctorByUserId(session.user.id);
     if (!doctor) throw new NotFoundError("Doctor profile");
     doctorId = doctor.id;
   }
 
-  const { items, total } = await patientRepo.listPatients({
-    skip,
-    take,
-    sortOrder: query.sortOrder,
-    gender: query.gender,
-    bloodGroup: query.bloodGroup,
-    search: query.search,
-    doctorId,
-  });
-  return { items, meta: paginationMeta(query, total) };
+  const fetcher = async () => {
+    const { items, total } = await patientRepo.listPatients({
+      skip,
+      take,
+      sortOrder: query.sortOrder,
+      gender: query.gender,
+      bloodGroup: query.bloodGroup,
+      search: query.search,
+      phone: query.phone,
+      healthCardNumber: query.healthCardNumber,
+      doctorId,
+      appointmentStatus: query.appointmentStatus,
+    });
+    return { items, meta: paginationMeta(query, total) };
+  };
+
+  if (isDefaultPatientListQuery(query, doctorId)) {
+    return getOrSetCache(
+      PATIENT_LIST_DEFAULT_CACHE_KEY,
+      CACHE_TTL.patientList,
+      fetcher
+    );
+  }
+  return fetcher();
 }
 
 export async function createPatientService(
@@ -100,6 +138,7 @@ export async function createPatientService(
   });
 
   await createHealthCard(patient.id);
+  await invalidateCache(PATIENT_LIST_DEFAULT_CACHE_KEY);
 
   await writeAuditLog({
     actorId,
@@ -121,6 +160,7 @@ export async function updatePatientService(
   assertWriteAccess(session, patient);
 
   const updated = await patientRepo.updatePatient(id, input);
+  await invalidateCache(PATIENT_LIST_DEFAULT_CACHE_KEY);
 
   await writeAuditLog({
     actorId: session.user.id,
@@ -138,6 +178,7 @@ export async function deletePatientService(session: Session, id: string) {
   if (!isAdminRole(session.user.role)) throw new ForbiddenError();
 
   const deleted = await patientRepo.softDeletePatient(id);
+  await invalidateCache(PATIENT_LIST_DEFAULT_CACHE_KEY);
 
   await writeAuditLog({
     actorId: session.user.id,

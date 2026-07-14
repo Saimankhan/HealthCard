@@ -59,7 +59,7 @@ export function PatientShell({
   return (
     <div className="flex min-h-full flex-1">
       {/* Desktop sidebar */}
-      <aside className="bg-card hidden w-64 shrink-0 flex-col border-r p-4 md:flex">
+      <aside className="bg-card hidden w-64 shrink-0 flex-col border-r p-4 md:flex print:hidden">
         <Link href="/patient" className="mb-6 px-2 text-lg font-semibold">
           HealthCard
         </Link>
@@ -68,7 +68,7 @@ export function PatientShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
-        <header className="bg-background flex h-14 items-center justify-between gap-2 border-b px-4">
+        <header className="bg-background flex h-14 items-center justify-between gap-2 border-b px-4 print:hidden">
           <div className="flex items-center gap-2 md:hidden">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger

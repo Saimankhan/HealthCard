@@ -133,3 +133,36 @@ export async function listSpecializationNames() {
     select: { id: true, name: true },
   });
 }
+
+export async function pingDatabase() {
+  await prisma.$queryRaw`SELECT 1`;
+}
+
+export async function getPrescriptionVolumeByDay(sinceDate: Date) {
+  return prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+    SELECT date_trunc('day', "issuedAt") as day, COUNT(*)::bigint as count
+    FROM "prescription"
+    WHERE "issuedAt" >= ${sinceDate} AND "deletedAt" IS NULL
+    GROUP BY day
+    ORDER BY day ASC
+  `;
+}
+
+export async function getPrescriptionCountsByDoctor() {
+  return prisma.prescription.groupBy({
+    by: ["doctorId"],
+    where: { deletedAt: null },
+    _count: { _all: true },
+  });
+}
+
+/** DAU based on audit-log LOGIN entries (written by the session.create.after auth hook). */
+export async function getDailyActiveUserCounts(sinceDate: Date) {
+  return prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+    SELECT date_trunc('day', "createdAt") as day, COUNT(DISTINCT "actorId")::bigint as count
+    FROM "audit_log"
+    WHERE "action" = 'LOGIN' AND "createdAt" >= ${sinceDate} AND "actorId" IS NOT NULL
+    GROUP BY day
+    ORDER BY day ASC
+  `;
+}

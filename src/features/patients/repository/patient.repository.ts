@@ -1,6 +1,11 @@
 import "server-only";
 import { prisma } from "@/core/db/prisma";
-import type { BloodGroup, Gender, Prisma } from "@/generated/prisma/client";
+import type {
+  AppointmentStatus,
+  BloodGroup,
+  Gender,
+  Prisma,
+} from "@/generated/prisma/client";
 
 const userSummarySelect = {
   select: { id: true, name: true, email: true, image: true },
@@ -27,23 +32,59 @@ export async function listPatients(params: {
   gender?: Gender;
   bloodGroup?: BloodGroup;
   search?: string;
+  phone?: string;
+  healthCardNumber?: string;
   doctorId?: string;
+  appointmentStatus?: AppointmentStatus;
 }) {
+  const appointmentFilter =
+    params.doctorId || params.appointmentStatus
+      ? {
+          appointments: {
+            some: {
+              ...(params.doctorId ? { doctorId: params.doctorId } : {}),
+              ...(params.appointmentStatus
+                ? { status: params.appointmentStatus }
+                : {}),
+            },
+          },
+        }
+      : {};
+
   const where: Prisma.PatientWhereInput = {
     deletedAt: null,
     ...(params.gender ? { gender: params.gender } : {}),
     ...(params.bloodGroup ? { bloodGroup: params.bloodGroup } : {}),
-    ...(params.doctorId
-      ? { appointments: { some: { doctorId: params.doctorId } } }
+    ...(params.phone
+      ? { phone: { contains: params.phone, mode: "insensitive" } }
       : {}),
+    ...(params.healthCardNumber
+      ? {
+          healthCard: {
+            cardNumber: {
+              contains: params.healthCardNumber,
+              mode: "insensitive",
+            },
+          },
+        }
+      : {}),
+    ...appointmentFilter,
     ...(params.search
       ? {
-          user: {
-            OR: [
-              { name: { contains: params.search, mode: "insensitive" } },
-              { email: { contains: params.search, mode: "insensitive" } },
-            ],
-          },
+          OR: [
+            {
+              user: { name: { contains: params.search, mode: "insensitive" } },
+            },
+            {
+              user: { email: { contains: params.search, mode: "insensitive" } },
+            },
+            { phone: { contains: params.search, mode: "insensitive" } },
+            {
+              healthCard: {
+                cardNumber: { contains: params.search, mode: "insensitive" },
+              },
+            },
+          ],
         }
       : {}),
   };

@@ -3,6 +3,7 @@ import type { Session } from "@/core/auth/auth";
 import { isAdminRole } from "@/core/auth/roles";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
+import { CACHE_TTL, getOrSetCache, invalidateCache } from "@/core/cache/cache";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import * as medicalHistoryRepo from "@/features/medical-history/repository/medical-history.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
@@ -45,6 +46,39 @@ function assertWriteAccess(session: Session, record: MedicalHistoryRecord) {
   throw new ForbiddenError();
 }
 
+/**
+ * Every real call site (patient/doctor/admin detail pages, dashboards)
+ * fixes page=1 and sortOrder="desc" — only pageSize varies (3/5/50) between
+ * dashboard previews and full-history views — so caching keys off patientId
+ * + doctorId + pageSize covers all of them without an unbounded key space.
+ */
+function medicalHistoryCacheKey(
+  patientId: string | undefined,
+  doctorId: string | undefined,
+  pageSize: number
+) {
+  return `cache:medical-history:${patientId ?? "any"}:${doctorId ?? "any"}:${pageSize}`;
+}
+
+function isCacheableMedicalHistoryQuery(query: ListMedicalHistoryQuery) {
+  return query.page === 1 && query.sortOrder === "desc";
+}
+
+const MEDICAL_HISTORY_PAGE_SIZES = [3, 5, 50] as const;
+
+async function invalidateMedicalHistoryCaches(
+  patientId: string | undefined,
+  doctorId?: string
+) {
+  const keys = MEDICAL_HISTORY_PAGE_SIZES.flatMap((pageSize) => [
+    medicalHistoryCacheKey(patientId, undefined, pageSize),
+    ...(doctorId
+      ? [medicalHistoryCacheKey(patientId, doctorId, pageSize)]
+      : []),
+  ]);
+  await invalidateCache(...keys);
+}
+
 export async function listMedicalHistoryService(
   session: Session,
   query: ListMedicalHistoryQuery
@@ -74,15 +108,25 @@ export async function listMedicalHistoryService(
     throw new ForbiddenError();
   }
 
-  const { items, total } = await medicalHistoryRepo.listMedicalHistory({
-    skip,
-    take,
-    sortOrder: query.sortOrder,
-    patientId,
-    doctorId,
-  });
+  const fetcher = async () => {
+    const { items, total } = await medicalHistoryRepo.listMedicalHistory({
+      skip,
+      take,
+      sortOrder: query.sortOrder,
+      patientId,
+      doctorId,
+    });
+    return { items, meta: paginationMeta(query, total) };
+  };
 
-  return { items, meta: paginationMeta(query, total) };
+  if (isCacheableMedicalHistoryQuery(query)) {
+    return getOrSetCache(
+      medicalHistoryCacheKey(patientId, doctorId, query.pageSize),
+      CACHE_TTL.medicalHistory,
+      fetcher
+    );
+  }
+  return fetcher();
 }
 
 export async function getMedicalHistoryByIdService(
@@ -126,6 +170,7 @@ export async function createMedicalHistoryService(
     notes: input.notes,
     recordedAt: input.recordedAt,
   });
+  await invalidateMedicalHistoryCaches(input.patientId, doctorId);
 
   await writeAuditLog({
     actorId: session.user.id,
@@ -147,6 +192,10 @@ export async function updateMedicalHistoryService(
   assertWriteAccess(session, record);
 
   const updated = await medicalHistoryRepo.updateMedicalHistory(id, input);
+  await invalidateMedicalHistoryCaches(
+    record.patientId,
+    record.doctorId ?? undefined
+  );
 
   await writeAuditLog({
     actorId: session.user.id,
@@ -167,6 +216,10 @@ export async function deleteMedicalHistoryService(
   assertWriteAccess(session, record);
 
   const deleted = await medicalHistoryRepo.softDeleteMedicalHistory(id);
+  await invalidateMedicalHistoryCaches(
+    record.patientId,
+    record.doctorId ?? undefined
+  );
 
   await writeAuditLog({
     actorId: session.user.id,

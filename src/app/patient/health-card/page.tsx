@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { QrCode } from "lucide-react";
 
 import { getCurrentSession } from "@/core/auth/rbac";
 import { getOwnPatientProfileService } from "@/features/patients/services/patient.service";
@@ -7,6 +6,7 @@ import { getOwnHealthCardService } from "@/features/healthcard/services/health-c
 
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/patient/status-badge";
+import { HealthCardActions } from "@/components/patient/health-card-actions";
 import { formatDate, formatEnumLabel } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Health Card - HealthCard" };
@@ -67,10 +67,23 @@ export default async function HealthCardPage() {
             </div>
           </div>
           <div className="flex flex-col items-center gap-2">
-            <div className="flex size-24 items-center justify-center rounded-lg bg-white/15">
-              <QrCode className="size-12 opacity-70" />
-            </div>
-            <p className="text-xs opacity-70">QR coming soon</p>
+            {healthCard ? (
+              <div className="flex size-24 items-center justify-center overflow-hidden rounded-lg bg-white p-1.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/api/health-cards/me/qr"
+                  alt="HealthCard verification QR code"
+                  className="size-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="flex size-24 items-center justify-center rounded-lg bg-white/15">
+                <p className="px-2 text-center text-[10px] opacity-70">
+                  No card issued
+                </p>
+              </div>
+            )}
+            <p className="text-xs opacity-70">Scan to verify</p>
           </div>
         </div>
         {healthCard && (
@@ -79,6 +92,18 @@ export default async function HealthCardPage() {
           </div>
         )}
       </div>
+
+      {healthCard && (
+        <HealthCardActions
+          cardNumber={healthCard.cardNumber}
+          status={healthCard.status}
+          patientName={session.user.name}
+          bloodGroup={patient.bloodGroup}
+          dateOfBirth={patient.dateOfBirth}
+          issuedAt={healthCard.issuedAt}
+          expiresAt={healthCard.expiresAt}
+        />
+      )}
 
       <Card>
         <CardContent className="grid gap-4 py-6 sm:grid-cols-2">

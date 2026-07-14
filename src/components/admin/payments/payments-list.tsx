@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Search } from "lucide-react";
 
-import { apiFetchWithMeta } from "@/lib/api-client";
+import { useListQuery } from "@/hooks/use-list-query";
 import { formatCurrency, formatDate, formatEnumLabel } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -48,42 +48,19 @@ type PaymentRow = {
 };
 
 export function AdminPaymentsList() {
-  const [items, setItems] = useState<PaymentRow[] | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [method, setMethod] = useState("ALL");
 
-  async function load() {
-    try {
-      const params = new URLSearchParams({
-        sortOrder: "desc",
-        pageSize: "100",
-      });
-      if (status !== "ALL") params.set("status", status);
-      if (method !== "ALL") params.set("method", method);
-      const { data } = await apiFetchWithMeta<PaymentRow[]>(
-        `/api/payments?${params.toString()}`
-      );
-      setItems(data);
-    } catch {
-      toast.error("Unable to load payments");
-      setItems([]);
-    }
-  }
+  const { items, error } = useListQuery<PaymentRow, Record<string, string>>({
+    endpoint: "/api/payments",
+    filters: { search, status, method },
+    baseParams: { sortOrder: "desc", pageSize: "100" },
+  });
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, method]);
-
-  const filtered = useMemo(() => {
-    if (!items) return null;
-    const query = search.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter((p) =>
-      p.patient.user.name.toLowerCase().includes(query)
-    );
-  }, [items, search]);
+    if (error) toast.error("Unable to load payments");
+  }, [error]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -123,12 +100,12 @@ export function AdminPaymentsList() {
         </Select>
       </div>
 
-      {filtered === null ? (
+      {items === null ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : items.length === 0 ? (
         <Card>
           <CardContent>
             <EmptyState message="No payments found." />
@@ -136,7 +113,7 @@ export function AdminPaymentsList() {
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          {filtered.map((payment) => (
+          {items.map((payment) => (
             <Card key={payment.id}>
               <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
                 <div className="min-w-0">

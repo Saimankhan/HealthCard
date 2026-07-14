@@ -46,6 +46,7 @@ export async function listAppointments(params: {
   doctorId?: string;
   from?: Date;
   to?: Date;
+  search?: string;
 }) {
   const where: Prisma.AppointmentWhereInput = {
     ...(params.status ? { status: params.status } : {}),
@@ -57,6 +58,26 @@ export async function listAppointments(params: {
             ...(params.from ? { gte: params.from } : {}),
             ...(params.to ? { lte: params.to } : {}),
           },
+        }
+      : {}),
+    ...(params.search
+      ? {
+          OR: [
+            {
+              patient: {
+                user: {
+                  name: { contains: params.search, mode: "insensitive" },
+                },
+              },
+            },
+            {
+              doctor: {
+                user: {
+                  name: { contains: params.search, mode: "insensitive" },
+                },
+              },
+            },
+          ],
         }
       : {}),
   };

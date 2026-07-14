@@ -40,11 +40,19 @@ export async function listPayments(params: {
   patientId?: string;
   status?: PaymentStatus;
   method?: PaymentMethod;
+  search?: string;
 }) {
   const where: Prisma.PaymentWhereInput = {
     ...(params.patientId ? { patientId: params.patientId } : {}),
     ...(params.status ? { status: params.status } : {}),
     ...(params.method ? { method: params.method } : {}),
+    ...(params.search
+      ? {
+          patient: {
+            user: { name: { contains: params.search, mode: "insensitive" } },
+          },
+        }
+      : {}),
   };
 
   const [items, total] = await Promise.all([

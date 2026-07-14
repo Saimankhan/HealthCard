@@ -83,3 +83,19 @@ export async function updateHealthCardStatus(
     include: patientUserInclude,
   });
 }
+
+export async function reissueHealthCard(
+  id: string,
+  opts?: { newCardNumber?: boolean; expiresAt?: Date }
+) {
+  return prisma.healthCard.update({
+    where: { id },
+    data: {
+      verificationToken: randomUUID(),
+      status: "ACTIVE",
+      ...(opts?.newCardNumber ? { cardNumber: generateCardNumber() } : {}),
+      ...(opts?.expiresAt ? { expiresAt: opts.expiresAt } : {}),
+    },
+    include: patientUserInclude,
+  });
+}

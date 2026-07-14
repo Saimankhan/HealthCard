@@ -182,6 +182,7 @@ export async function listPaymentsService(
     patientId,
     status: query.status,
     method: query.method,
+    search: query.search,
   });
 
   return { items, meta: paginationMeta(query, total) };

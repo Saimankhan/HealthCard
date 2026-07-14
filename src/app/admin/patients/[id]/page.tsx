@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { getCurrentSession } from "@/core/auth/rbac";
 import { getPatientByIdService } from "@/features/patients/services/patient.service";
+import { getHealthCardByPatientIdService } from "@/features/healthcard/services/health-card.service";
 import { listMedicalHistoryService } from "@/features/medical-history/services/medical-history.service";
 import { listMedicalHistoryQuerySchema } from "@/features/medical-history/validation/medical-history.validation";
 
@@ -13,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/patient/section-card";
 import { MedicalReportsManager } from "@/components/patient/medical-reports/medical-reports-manager";
 import { EditPatientForm } from "@/components/admin/patients/edit-patient-form";
+import { HealthCardPanel } from "@/components/admin/patients/health-card-panel";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Patient - HealthCard Admin" };
@@ -41,6 +43,8 @@ export default async function AdminPatientDetailPage({
       sortOrder: "desc",
     })
   );
+
+  const healthCard = await getHealthCardByPatientIdService(session, patient.id);
 
   return (
     <div className="flex flex-col gap-4">
@@ -74,6 +78,23 @@ export default async function AdminPatientDetailPage({
           emergencyContactName: patient.emergencyContactName ?? "",
           emergencyContactPhone: patient.emergencyContactPhone ?? "",
         }}
+      />
+
+      <HealthCardPanel
+        patientId={patient.id}
+        healthCard={
+          healthCard
+            ? {
+                id: healthCard.id,
+                cardNumber: healthCard.cardNumber,
+                status: healthCard.status,
+                issuedAt: healthCard.issuedAt.toISOString(),
+                expiresAt: healthCard.expiresAt
+                  ? healthCard.expiresAt.toISOString()
+                  : null,
+              }
+            : null
+        }
       />
 
       <Card>

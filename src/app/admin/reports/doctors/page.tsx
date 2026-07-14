@@ -5,6 +5,7 @@ import { getDoctorReportService } from "@/features/reports/services/report.servi
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/patient/section-card";
 import { CategoryBreakdownChart } from "@/components/admin/reports-charts";
+import { ExportButton } from "@/components/admin/reports/export-button";
 
 export const metadata: Metadata = { title: "Doctor Report - HealthCard Admin" };
 
@@ -13,11 +14,14 @@ export default async function DoctorReportPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Doctor Report</h1>
-        <p className="text-muted-foreground text-sm">
-          {report.total} total doctors on the platform.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Doctor Report</h1>
+          <p className="text-muted-foreground text-sm">
+            {report.total} total doctors on the platform.
+          </p>
+        </div>
+        <ExportButton domain="doctors" />
       </div>
 
       <Card>

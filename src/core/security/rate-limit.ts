@@ -18,3 +18,19 @@ export async function checkRateLimit(
   }
   return count <= limit;
 }
+
+/**
+ * Best-effort client IP extraction for rate-limiting public routes.
+ * Accepts anything header-like (`NextRequest.headers` or the `headers()`
+ * helper from `next/headers`) so it works from both route handlers and
+ * Server Components.
+ */
+export function getClientIp(headers: {
+  get(name: string): string | null;
+}): string {
+  const forwardedFor = headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]!.trim();
+  }
+  return headers.get("x-real-ip") ?? "unknown";
+}
