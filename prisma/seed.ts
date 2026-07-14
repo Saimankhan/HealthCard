@@ -1,9 +1,7 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 
-import { neonConfig } from "@neondatabase/serverless";
-import { PrismaNeon } from "@prisma/adapter-neon";
-import ws from "ws";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "better-auth/crypto";
 
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -13,9 +11,7 @@ import type {
   AppointmentStatus,
 } from "../src/generated/prisma/client";
 
-neonConfig.webSocketConstructor = ws;
-
-const adapter = new PrismaNeon({
+const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
 });
 const prisma = new PrismaClient({ adapter });
