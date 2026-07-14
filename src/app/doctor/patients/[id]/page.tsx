@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/patient/section-card";
 import { MedicalReportsManager } from "@/components/patient/medical-reports/medical-reports-manager";
 import { AddMedicalHistoryForm } from "@/components/doctor/patients/add-medical-history-form";
+import { EditMedicalHistoryForm } from "@/components/doctor/patients/edit-medical-history-form";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Patient - HealthCard" };
@@ -111,9 +112,21 @@ export default async function DoctorPatientDetailPage({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium">{entry.condition}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {formatDate(entry.recordedAt)}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-muted-foreground text-xs">
+                        {formatDate(entry.recordedAt)}
+                      </p>
+                      {entry.doctor?.userId === session.user.id && (
+                        <EditMedicalHistoryForm
+                          entry={{
+                            id: entry.id,
+                            condition: entry.condition,
+                            diagnosis: entry.diagnosis,
+                            notes: entry.notes,
+                          }}
+                        />
+                      )}
+                    </div>
                   </div>
                   {entry.diagnosis && (
                     <p className="text-sm">

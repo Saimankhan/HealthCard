@@ -251,6 +251,26 @@ export default async function DoctorDashboardPage() {
         </SectionCard>
 
         <SectionCard
+          title="Recent Prescriptions"
+          viewAllHref="/doctor/prescriptions"
+        >
+          {prescriptions.items.length === 0 ? (
+            <EmptyState message="No prescriptions issued yet." />
+          ) : (
+            prescriptions.items.slice(0, 5).map((rx) => (
+              <div key={rx.id} className="text-sm">
+                <p className="font-medium">{rx.patient.user.name}</p>
+                <p className="text-muted-foreground text-xs">
+                  {formatDate(rx.issuedAt)} &middot;{" "}
+                  {Array.isArray(rx.medications) ? rx.medications.length : 0}{" "}
+                  medication(s)
+                </p>
+              </div>
+            ))
+          )}
+        </SectionCard>
+
+        <SectionCard
           title="Recent Medical History Updates"
           viewAllHref="/doctor/patients"
         >
