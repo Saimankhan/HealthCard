@@ -16,14 +16,6 @@ export async function findUserByEmail(email: string) {
   return prisma.user.findFirst({ where: { email, deletedAt: null } });
 }
 
-export async function listUserIds(role?: Role) {
-  const users = await prisma.user.findMany({
-    where: { deletedAt: null, ...(role ? { role } : {}) },
-    select: { id: true },
-  });
-  return users.map((u) => u.id);
-}
-
 export async function listUsersForBroadcast(role?: Role) {
   return prisma.user.findMany({
     where: { deletedAt: null, suspendedAt: null, ...(role ? { role } : {}) },

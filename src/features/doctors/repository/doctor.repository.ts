@@ -25,6 +25,14 @@ export async function findDoctorByUserId(userId: string) {
   });
 }
 
+/** Includes soft-deleted doctors; only for cascading a user-account restore. */
+export async function findDoctorByUserIdIncludingDeleted(userId: string) {
+  return prisma.doctor.findFirst({
+    where: { userId },
+    include: doctorInclude,
+  });
+}
+
 export async function listDoctors(params: {
   skip: number;
   take: number;
@@ -119,5 +127,12 @@ export async function softDeleteDoctor(id: string) {
   return prisma.doctor.update({
     where: { id },
     data: { deletedAt: new Date() },
+  });
+}
+
+export async function restoreDoctor(id: string) {
+  return prisma.doctor.update({
+    where: { id },
+    data: { deletedAt: null },
   });
 }

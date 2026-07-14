@@ -1,6 +1,15 @@
 import "server-only";
 import { redis } from "@/core/cache/redis";
 
+/**
+ * Cached values (patient lists, medical history, health-card lookups, etc.)
+ * are stored as plaintext JSON — there is no additional application-level
+ * encryption. The trust boundary is Upstash's REST API bearer-token auth
+ * (`UPSTASH_REDIS_REST_TOKEN`); anyone with that token can read every
+ * cached record. Treat the token with the same care as a database
+ * credential, and never log it (see the read/write/invalidate error
+ * handlers below, which log only the cache key).
+ */
 export const CACHE_TTL = {
   dashboard: 60,
   doctorList: 300,

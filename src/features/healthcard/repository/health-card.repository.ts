@@ -9,7 +9,7 @@ const patientUserInclude = {
   },
 } as const;
 
-export function generateCardNumber(): string {
+function generateCardNumber(): string {
   return `HC-${new Date().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 

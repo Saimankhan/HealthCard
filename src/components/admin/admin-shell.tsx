@@ -7,6 +7,7 @@ import { Menu, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { signOut } from "@/core/auth/auth-client";
+import { getInitials } from "@/lib/format";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -42,12 +43,7 @@ export function AdminShell({
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const initials = user.name
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initials = getInitials(user.name);
 
   async function handleLogout() {
     await signOut();

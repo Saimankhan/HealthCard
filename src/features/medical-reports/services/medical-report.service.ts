@@ -4,6 +4,7 @@ import type { Session } from "@/core/auth/auth";
 import { isAdminRole } from "@/core/auth/roles";
 import {
   BadRequestError,
+  ConflictError,
   ForbiddenError,
   NotFoundError,
 } from "@/core/api/errors";
@@ -68,10 +69,22 @@ function assertFileKeyOwnership(fileKey: string, patientId: string) {
   }
 }
 
+const UPLOAD_URL_RATE_LIMIT = { limit: 20, windowSeconds: 3600 };
+
 export async function requestUploadUrlService(
   session: Session,
   input: RequestUploadUrlInput
 ) {
+  const { checkRateLimit } = await import("@/core/security/rate-limit");
+  const allowed = await checkRateLimit(
+    `medical-report-upload-url:${session.user.id}`,
+    UPLOAD_URL_RATE_LIMIT.limit,
+    UPLOAD_URL_RATE_LIMIT.windowSeconds
+  );
+  if (!allowed) {
+    throw new ConflictError("Too many upload requests. Please wait a moment.");
+  }
+
   if (session.user.role === "PATIENT") {
     const patient = await patientRepo.findPatientByUserId(session.user.id);
     if (!patient || patient.id !== input.patientId) throw new ForbiddenError();

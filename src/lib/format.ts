@@ -36,3 +36,13 @@ export function formatEnumLabel(value: string): string {
     .map((word) => word[0]?.toUpperCase() + word.slice(1))
     .join(" ");
 }
+
+/** e.g. "John Smith" -> "JS", used for avatar fallback initials. */
+export function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}

@@ -29,7 +29,6 @@
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@stripe/stripe-js": "^9.9.0",
     "@upstash/redis": "^1.38.0",
     "better-auth": "^1.6.23",
     "class-variance-authority": "^0.7.1",

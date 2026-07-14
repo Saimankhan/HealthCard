@@ -24,6 +24,9 @@ vi.mock("@/features/doctors/repository/doctor.repository");
 vi.mock("@/features/appointments/repository/appointment.repository", () => ({
   existsAppointmentForDoctorAndPatient: vi.fn(),
 }));
+vi.mock("@/core/security/rate-limit", () => ({
+  checkRateLimit: vi.fn().mockResolvedValue(true),
+}));
 
 import * as medicalReportRepo from "@/features/medical-reports/repository/medical-report.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
@@ -39,6 +42,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/core/api/errors";
+import { checkRateLimit } from "@/core/security/rate-limit";
 import type { Session } from "@/core/auth/auth";
 
 function makeSession(role: string, userId = "user-1"): Session {
@@ -54,6 +58,7 @@ beforeEach(() => {
   vi.mocked(getSignedUploadUrl).mockResolvedValue(
     "https://signed.example/upload"
   );
+  vi.mocked(checkRateLimit).mockResolvedValue(true);
 });
 
 describe("requestUploadUrlService — RBAC gates", () => {

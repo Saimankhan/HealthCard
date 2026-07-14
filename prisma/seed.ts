@@ -22,6 +22,17 @@ const prisma = new PrismaClient({ adapter });
 
 const DEMO_PASSWORD = "Password123!";
 
+/** Mon-Fri 9-5 available, weekends off — matches the AvailabilitySlot shape the profile UI expects. */
+const WEEKDAY_AVAILABILITY = [
+  { day: "MON", startTime: "09:00", endTime: "17:00", isAvailable: true },
+  { day: "TUE", startTime: "09:00", endTime: "17:00", isAvailable: true },
+  { day: "WED", startTime: "09:00", endTime: "17:00", isAvailable: true },
+  { day: "THU", startTime: "09:00", endTime: "17:00", isAvailable: true },
+  { day: "FRI", startTime: "09:00", endTime: "17:00", isAvailable: true },
+  { day: "SAT", startTime: "09:00", endTime: "13:00", isAvailable: false },
+  { day: "SUN", startTime: "09:00", endTime: "13:00", isAvailable: false },
+];
+
 async function createUserWithProfile(options: {
   name: string;
   email: string;
@@ -88,6 +99,26 @@ async function main() {
   });
 
   // -----------------------------------------------------------------
+  // Departments
+  // -----------------------------------------------------------------
+  const departmentSeeds = [
+    { name: "Cardiology", description: "Heart and cardiovascular care" },
+    {
+      name: "Pediatrics",
+      description: "Care for infants, children, and teens",
+    },
+    { name: "Dermatology", description: "Skin, hair, and nail care" },
+    { name: "General Medicine", description: "Primary and preventive care" },
+  ];
+  for (const dept of departmentSeeds) {
+    await prisma.department.upsert({
+      where: { name: dept.name },
+      update: {},
+      create: dept,
+    });
+  }
+
+  // -----------------------------------------------------------------
   // Specializations
   // -----------------------------------------------------------------
   const specializationNames = [
@@ -150,7 +181,10 @@ async function main() {
     });
     const doctor = await prisma.doctor.upsert({
       where: { userId: user.id },
-      update: {},
+      // Re-applying availability on every seed run (even for a doctor that
+      // already existed) keeps the demo self-healing — a doctor seeded
+      // before this field existed would otherwise stay stuck with none.
+      update: { availability: WEEKDAY_AVAILABILITY },
       create: {
         userId: user.id,
         licenseNumber: seed.licenseNumber,
@@ -158,6 +192,7 @@ async function main() {
         experienceYears: seed.experienceYears,
         consultationFee: seed.consultationFee,
         phone: "+1-555-0100",
+        availability: WEEKDAY_AVAILABILITY,
       },
     });
     for (const specName of seed.specs) {
@@ -417,7 +452,64 @@ async function main() {
             message: `Your appointment scheduled for ${plan.scheduledAt.toDateString()} was cancelled.`,
           },
         });
+
+        // A cancelled appointment's payment attempt that didn't go through —
+        // gives the demo a FAILED payment to show alongside SUCCEEDED/PENDING.
+        await prisma.payment.create({
+          data: {
+            patientId: plan.patient.id,
+            appointmentId: appointment.id,
+            amount: plan.doctor.fee,
+            status: "FAILED",
+            method: "CARD",
+          },
+        });
       }
+    }
+
+    // A standalone refunded payment (e.g. an overcharge correction) so the
+    // demo has REFUNDED/PARTIALLY_REFUNDED represented too, and an insurance
+    // payment so PaymentMethod.INSURANCE has a visible example.
+    const refundedPayment = await prisma.payment.create({
+      data: {
+        patientId: patients[1].id,
+        amount: doctors[1].fee,
+        status: "REFUNDED",
+        method: "CASH",
+        refundedAmount: doctors[1].fee,
+      },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: patients[1].userId,
+        type: "PAYMENT_SUCCESS",
+        title: "Refund processed",
+        message: `A refund of $${refundedPayment.refundedAmount} has been issued.`,
+      },
+    });
+
+    await prisma.payment.create({
+      data: {
+        patientId: patients[2].id,
+        amount: "80.00",
+        status: "SUCCEEDED",
+        method: "INSURANCE",
+      },
+    });
+
+    // Broadcast-style announcement to every seeded patient, so the demo has
+    // at least one SYSTEM_ANNOUNCEMENT notification without needing to
+    // trigger the admin broadcast feature live.
+    for (const patient of patients) {
+      await prisma.notification.create({
+        data: {
+          userId: patient.userId,
+          type: "SYSTEM_ANNOUNCEMENT",
+          title: "Welcome to HealthCard",
+          message:
+            "Thanks for joining HealthCard! Explore your dashboard to book appointments, view prescriptions, and manage your digital HealthCard.",
+        },
+      });
     }
   }
 

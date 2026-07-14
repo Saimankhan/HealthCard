@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Camera } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
+import { getInitials } from "@/lib/format";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,12 +106,7 @@ export function DoctorProfileForm({
       .catch(() => setSpecializations([]));
   }, []);
 
-  const initials = user.name
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initials = getInitials(user.name);
 
   const practiceForm = useForm<z.infer<typeof practiceInfoSchema>>({
     resolver: zodResolver(practiceInfoSchema),

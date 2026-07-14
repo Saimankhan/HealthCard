@@ -156,6 +156,17 @@ async function finalizePaymentSuccess(
   await confirmLinkedAppointmentIfPending(updated);
   await notifyPaymentSucceeded(updated);
 
+  // actorId is null here: this fires from both the Stripe webhook (no
+  // session) and the patient-facing verify-payment poll, so "system/Stripe
+  // confirmed this payment" is the accurate attribution either way.
+  await writeAuditLog({
+    actorId: null,
+    action: "STATUS_CHANGE",
+    entityType: "Payment",
+    entityId: paymentId,
+    metadata: { status: "SUCCEEDED", source: "stripe" },
+  });
+
   return updated;
 }
 
@@ -310,6 +321,8 @@ export async function createCheckoutSessionService(
   return { url: checkoutSession.url };
 }
 
+const VERIFY_PAYMENT_RATE_LIMIT = { limit: 30, windowSeconds: 60 };
+
 export async function verifyPaymentService(
   session: Session,
   sessionId: string
@@ -319,6 +332,18 @@ export async function verifyPaymentService(
   assertPaymentAccess(session, payment);
 
   if (payment.status === "PENDING") {
+    const { checkRateLimit } = await import("@/core/security/rate-limit");
+    const allowed = await checkRateLimit(
+      `verify-payment:${session.user.id}`,
+      VERIFY_PAYMENT_RATE_LIMIT.limit,
+      VERIFY_PAYMENT_RATE_LIMIT.windowSeconds
+    );
+    if (!allowed) {
+      throw new ConflictError(
+        "Too many verification attempts. Please wait a moment."
+      );
+    }
+
     const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
     if (checkoutSession.payment_status === "paid") {
       const updated = await finalizePaymentSuccess(payment.id, {
@@ -415,6 +440,14 @@ export async function handlePaymentIntentFailedWebhook(
 
   const updated = await paymentRepo.updatePaymentStatus(payment.id, "FAILED");
   await notifyPaymentFailed(updated);
+
+  await writeAuditLog({
+    actorId: null,
+    action: "STATUS_CHANGE",
+    entityType: "Payment",
+    entityId: payment.id,
+    metadata: { status: "FAILED", source: "stripe" },
+  });
 }
 
 export async function handleChargeRefundedWebhook(charge: Stripe.Charge) {
@@ -445,4 +478,16 @@ export async function handleChargeRefundedWebhook(charge: Stripe.Charge) {
   );
 
   await notifyPaymentRefunded(updated, refundedAmount);
+
+  await writeAuditLog({
+    actorId: null,
+    action: "STATUS_CHANGE",
+    entityType: "Payment",
+    entityId: payment.id,
+    metadata: {
+      status: isFullRefund ? "REFUNDED" : "PARTIALLY_REFUNDED",
+      refundedAmount,
+      source: "stripe",
+    },
+  });
 }

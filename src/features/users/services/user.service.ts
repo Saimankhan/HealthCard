@@ -19,6 +19,8 @@ import { resolveAvatarUrl } from "@/core/storage/avatar";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import * as userRepo from "@/features/users/repository/user.repository";
 import * as patientRepo from "@/features/patients/repository/patient.repository";
+import * as doctorRepo from "@/features/doctors/repository/doctor.repository";
+import * as healthCardRepo from "@/features/healthcard/repository/health-card.repository";
 import { createHealthCard } from "@/features/healthcard/repository/health-card.repository";
 import type {
   ConfirmAvatarInput,
@@ -63,6 +65,13 @@ export async function updateOwnProfileService(
   input: UpdateUserInput
 ) {
   const updated = await userRepo.updateUser(userId, input);
+  await writeAuditLog({
+    actorId: userId,
+    action: "UPDATE",
+    entityType: "User",
+    entityId: userId,
+    metadata: { selfService: true },
+  });
   return withResolvedAvatar(updated);
 }
 
@@ -107,12 +116,54 @@ export async function updateUserRoleService(
   return updated;
 }
 
+/**
+ * `User.deletedAt` is the account-level switch, but Patient/Doctor rows
+ * carry their own independent `deletedAt` — without this, a deactivated
+ * doctor stayed fully bookable and a deactivated patient's HealthCard
+ * stayed ACTIVE, since every Patient/Doctor query filters on their own
+ * `deletedAt` only, never the linked User's status.
+ */
+async function cascadeUserDeactivation(userId: string) {
+  const patient = await patientRepo.findPatientByUserId(userId);
+  if (patient) {
+    await patientRepo.softDeletePatient(patient.id);
+    const card = await healthCardRepo.findHealthCardByPatientId(patient.id);
+    if (card && card.status === "ACTIVE") {
+      await healthCardRepo.updateHealthCardStatus(card.id, "REVOKED");
+    }
+  }
+
+  const doctor = await doctorRepo.findDoctorByUserId(userId);
+  if (doctor) {
+    await doctorRepo.softDeleteDoctor(doctor.id);
+  }
+}
+
+/**
+ * Mirror of `cascadeUserDeactivation` for restores. Deliberately does not
+ * reactivate a HealthCard that was revoked on deactivation — reissuing a
+ * card is a distinct, explicit admin action, not an implicit side effect
+ * of restoring account access.
+ */
+async function cascadeUserRestoration(userId: string) {
+  const patient = await patientRepo.findPatientByUserIdIncludingDeleted(userId);
+  if (patient?.deletedAt) {
+    await patientRepo.restorePatient(patient.id);
+  }
+
+  const doctor = await doctorRepo.findDoctorByUserIdIncludingDeleted(userId);
+  if (doctor?.deletedAt) {
+    await doctorRepo.restoreDoctor(doctor.id);
+  }
+}
+
 export async function deactivateUserService(
   actorId: string,
   targetUserId: string
 ) {
   await getUserByIdService(targetUserId);
   const updated = await userRepo.softDeleteUser(targetUserId);
+  await cascadeUserDeactivation(targetUserId);
   await writeAuditLog({
     actorId,
     action: "DELETE",
@@ -158,10 +209,7 @@ export async function createUserService(
   return withResolvedAvatar(user);
 }
 
-export async function suspendUserService(
-  actorId: string,
-  targetUserId: string
-) {
+async function suspendUserService(actorId: string, targetUserId: string) {
   await getUserByIdService(targetUserId);
   const updated = await userRepo.suspendUser(targetUserId);
   await writeAuditLog({
@@ -174,10 +222,7 @@ export async function suspendUserService(
   return withResolvedAvatar(updated);
 }
 
-export async function unsuspendUserService(
-  actorId: string,
-  targetUserId: string
-) {
+async function unsuspendUserService(actorId: string, targetUserId: string) {
   await getUserByIdService(targetUserId);
   const updated = await userRepo.unsuspendUser(targetUserId);
   await writeAuditLog({
@@ -190,14 +235,12 @@ export async function unsuspendUserService(
   return withResolvedAvatar(updated);
 }
 
-export async function restoreUserService(
-  actorId: string,
-  targetUserId: string
-) {
+async function restoreUserService(actorId: string, targetUserId: string) {
   const target = await userRepo.findUserByIdIncludingDeleted(targetUserId);
   if (!target) throw new NotFoundError("User");
 
   const updated = await userRepo.restoreUser(targetUserId);
+  await cascadeUserRestoration(targetUserId);
   await writeAuditLog({
     actorId,
     action: "STATUS_CHANGE",
@@ -233,6 +276,7 @@ export async function updateUserStatusService(
 
 export async function deleteOwnAccountService(session: Session) {
   const updated = await userRepo.softDeleteUser(session.user.id);
+  await cascadeUserDeactivation(session.user.id);
   await writeAuditLog({
     actorId: session.user.id,
     action: "DELETE",
@@ -243,10 +287,22 @@ export async function deleteOwnAccountService(session: Session) {
   return updated;
 }
 
+const AVATAR_UPLOAD_URL_RATE_LIMIT = { limit: 20, windowSeconds: 3600 };
+
 export async function requestAvatarUploadUrlService(
   session: Session,
   input: RequestAvatarUploadUrlInput
 ) {
+  const { checkRateLimit } = await import("@/core/security/rate-limit");
+  const allowed = await checkRateLimit(
+    `avatar-upload-url:${session.user.id}`,
+    AVATAR_UPLOAD_URL_RATE_LIMIT.limit,
+    AVATAR_UPLOAD_URL_RATE_LIMIT.windowSeconds
+  );
+  if (!allowed) {
+    throw new ConflictError("Too many upload requests. Please wait a moment.");
+  }
+
   assertValidFileUpload("profilePhotos", input.contentType, input.fileSize);
 
   const safeFileName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
