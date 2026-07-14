@@ -28,10 +28,22 @@ export async function listAuditLogs(params: {
   sortOrder: "asc" | "desc";
   entityType?: string;
   actorId?: string;
+  action?: AuditAction;
+  from?: Date;
+  to?: Date;
 }) {
   const where: Prisma.AuditLogWhereInput = {
     ...(params.entityType ? { entityType: params.entityType } : {}),
     ...(params.actorId ? { actorId: params.actorId } : {}),
+    ...(params.action ? { action: params.action } : {}),
+    ...(params.from || params.to
+      ? {
+          createdAt: {
+            ...(params.from ? { gte: params.from } : {}),
+            ...(params.to ? { lte: params.to } : {}),
+          },
+        }
+      : {}),
   };
 
   const [items, total] = await Promise.all([

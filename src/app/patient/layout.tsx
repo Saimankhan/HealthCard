@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
-
-import { getCurrentSession } from "@/core/auth/rbac";
+import { requirePageRole } from "@/core/auth/rbac";
 import { getUserByIdService } from "@/features/users/services/user.service";
 import { listOwnNotificationsService } from "@/features/notifications/services/notification.service";
 import { PatientShell } from "@/components/patient/patient-shell";
@@ -8,13 +6,7 @@ import { PatientShell } from "@/components/patient/patient-shell";
 export default async function PatientLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await getCurrentSession();
-  if (!session) {
-    redirect("/login");
-  }
-  if (session.user.role !== "PATIENT") {
-    redirect("/");
-  }
+  const session = await requirePageRole("PATIENT");
 
   const [user, { meta }] = await Promise.all([
     getUserByIdService(session.user.id),

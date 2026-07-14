@@ -98,9 +98,9 @@ export const auth = betterAuth({
         before: async (session) => {
           const user = await prisma.user.findUnique({
             where: { id: session.userId },
-            select: { deletedAt: true },
+            select: { deletedAt: true, suspendedAt: true },
           });
-          if (user?.deletedAt) {
+          if (user?.deletedAt || user?.suspendedAt) {
             return false;
           }
         },

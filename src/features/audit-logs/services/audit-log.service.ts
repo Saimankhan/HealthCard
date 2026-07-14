@@ -16,6 +16,9 @@ export async function listAuditLogsService(query: ListAuditLogsQuery) {
     sortOrder: query.sortOrder,
     entityType: query.entityType,
     actorId: query.actorId,
+    action: query.action,
+    from: query.from,
+    to: query.to,
   });
   return { items, meta: paginationMeta(query, total) };
 }

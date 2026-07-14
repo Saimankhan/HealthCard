@@ -1,7 +1,13 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { hashPassword } from "better-auth/crypto";
 import type { Session } from "@/core/auth/auth";
-import { ForbiddenError, NotFoundError } from "@/core/api/errors";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import {
   deleteObject,
@@ -11,12 +17,16 @@ import {
 import { resolveAvatarUrl } from "@/core/storage/avatar";
 import { writeAuditLog } from "@/features/audit-logs/services/audit-log.service";
 import * as userRepo from "@/features/users/repository/user.repository";
+import * as patientRepo from "@/features/patients/repository/patient.repository";
+import { createHealthCard } from "@/features/healthcard/repository/health-card.repository";
 import type {
   ConfirmAvatarInput,
+  CreateUserInput,
   ListUsersQuery,
   RequestAvatarUploadUrlInput,
   UpdateUserInput,
   UpdateUserRoleInput,
+  UpdateUserStatusInput,
 } from "@/features/users/validation/user.validation";
 
 async function withResolvedAvatar<T extends { image: string | null }>(
@@ -41,6 +51,7 @@ export async function listUsersService(query: ListUsersQuery) {
     sortOrder: query.sortOrder,
     role: query.role,
     search: query.search,
+    status: query.status,
   });
   const resolved = await Promise.all(items.map(withResolvedAvatar));
   return { items: resolved, meta: paginationMeta(query, total) };
@@ -51,6 +62,22 @@ export async function updateOwnProfileService(
   input: UpdateUserInput
 ) {
   const updated = await userRepo.updateUser(userId, input);
+  return withResolvedAvatar(updated);
+}
+
+export async function adminUpdateUserService(
+  actorId: string,
+  targetUserId: string,
+  input: UpdateUserInput
+) {
+  await getUserByIdService(targetUserId);
+  const updated = await userRepo.updateUser(targetUserId, input);
+  await writeAuditLog({
+    actorId,
+    action: "UPDATE",
+    entityType: "User",
+    entityId: targetUserId,
+  });
   return withResolvedAvatar(updated);
 }
 
@@ -92,6 +119,115 @@ export async function deactivateUserService(
     entityId: targetUserId,
   });
   return updated;
+}
+
+export async function createUserService(
+  actorId: string,
+  input: CreateUserInput
+) {
+  const existing = await userRepo.findUserByEmail(input.email);
+  if (existing) {
+    throw new ConflictError("A user with this email already exists");
+  }
+
+  const passwordHash = await hashPassword(input.password);
+  const user = await userRepo.createUserWithPassword({
+    id: randomUUID(),
+    name: input.name,
+    email: input.email,
+    role: input.role,
+    passwordHash,
+  });
+
+  if (input.role === "PATIENT") {
+    const patient = await patientRepo.createPatient({
+      user: { connect: { id: user.id } },
+    });
+    await createHealthCard(patient.id);
+  }
+
+  await writeAuditLog({
+    actorId,
+    action: "CREATE",
+    entityType: "User",
+    entityId: user.id,
+    metadata: { role: input.role },
+  });
+
+  return withResolvedAvatar(user);
+}
+
+export async function suspendUserService(
+  actorId: string,
+  targetUserId: string
+) {
+  await getUserByIdService(targetUserId);
+  const updated = await userRepo.suspendUser(targetUserId);
+  await writeAuditLog({
+    actorId,
+    action: "STATUS_CHANGE",
+    entityType: "User",
+    entityId: targetUserId,
+    metadata: { statusAction: "SUSPEND" },
+  });
+  return withResolvedAvatar(updated);
+}
+
+export async function unsuspendUserService(
+  actorId: string,
+  targetUserId: string
+) {
+  await getUserByIdService(targetUserId);
+  const updated = await userRepo.unsuspendUser(targetUserId);
+  await writeAuditLog({
+    actorId,
+    action: "STATUS_CHANGE",
+    entityType: "User",
+    entityId: targetUserId,
+    metadata: { statusAction: "UNSUSPEND" },
+  });
+  return withResolvedAvatar(updated);
+}
+
+export async function restoreUserService(
+  actorId: string,
+  targetUserId: string
+) {
+  const target = await userRepo.findUserByIdIncludingDeleted(targetUserId);
+  if (!target) throw new NotFoundError("User");
+
+  const updated = await userRepo.restoreUser(targetUserId);
+  await writeAuditLog({
+    actorId,
+    action: "STATUS_CHANGE",
+    entityType: "User",
+    entityId: targetUserId,
+    metadata: { statusAction: "RESTORE" },
+  });
+  return withResolvedAvatar(updated);
+}
+
+export async function updateUserStatusService(
+  session: Session,
+  targetUserId: string,
+  input: UpdateUserStatusInput
+) {
+  if (targetUserId === session.user.id) {
+    throw new BadRequestError(
+      "You cannot change the status of your own account"
+    );
+  }
+
+  switch (input.action) {
+    case "SUSPEND":
+      return suspendUserService(session.user.id, targetUserId);
+    case "UNSUSPEND":
+      return unsuspendUserService(session.user.id, targetUserId);
+    case "DELETE":
+      return deactivateUserService(session.user.id, targetUserId);
+    case "RESTORE":
+      return restoreUserService(session.user.id, targetUserId);
+  }
 }
 
 export async function deleteOwnAccountService(session: Session) {

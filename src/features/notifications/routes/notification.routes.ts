@@ -6,10 +6,12 @@ import { successResponse } from "@/core/api/response";
 import { parseSearchParams } from "@/core/api/pagination";
 import { idParamSchema } from "@/core/api/schemas";
 import {
+  broadcastNotificationSchema,
   createNotificationSchema,
   listNotificationsQuerySchema,
 } from "@/features/notifications/validation/notification.validation";
 import {
+  broadcastNotificationService,
   createNotificationService,
   listOwnNotificationsService,
   markAllNotificationsReadService,
@@ -52,4 +54,13 @@ export async function markAllNotificationsReadHandler(_request: NextRequest) {
   const session = await requireSession();
   const result = await markAllNotificationsReadService(session);
   return successResponse({ updated: result.count });
+}
+
+export async function broadcastNotificationHandler(request: NextRequest) {
+  await requireRole(...ADMIN_ROLES);
+
+  const body = broadcastNotificationSchema.parse(await request.json());
+  const result = await broadcastNotificationService(body);
+
+  return successResponse({ sent: result.count }, { status: 201 });
 }

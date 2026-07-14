@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
-
-import { getCurrentSession } from "@/core/auth/rbac";
+import { requirePageRole } from "@/core/auth/rbac";
 import { getUserByIdService } from "@/features/users/services/user.service";
 import { listOwnNotificationsService } from "@/features/notifications/services/notification.service";
 import { DoctorShell } from "@/components/doctor/doctor-shell";
@@ -8,13 +6,7 @@ import { DoctorShell } from "@/components/doctor/doctor-shell";
 export default async function DoctorLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await getCurrentSession();
-  if (!session) {
-    redirect("/login");
-  }
-  if (session.user.role !== "DOCTOR") {
-    redirect("/");
-  }
+  const session = await requirePageRole("DOCTOR");
 
   const [user, { meta }] = await Promise.all([
     getUserByIdService(session.user.id),

@@ -20,6 +20,22 @@ export async function createNotification(input: {
   });
 }
 
+export async function createNotificationsForUsers(input: {
+  userIds: string[];
+  type: NotificationType;
+  title: string;
+  message: string;
+}) {
+  return prisma.notification.createMany({
+    data: input.userIds.map((userId) => ({
+      userId,
+      type: input.type,
+      title: input.title,
+      message: input.message,
+    })),
+  });
+}
+
 export async function findNotificationById(id: string) {
   return prisma.notification.findUnique({ where: { id } });
 }

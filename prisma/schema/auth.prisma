@@ -12,6 +12,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   role          Role      @default(PATIENT)
   deletedAt     DateTime?
+  suspendedAt   DateTime?
   sessions      Session[]
   accounts      Account[]
 
@@ -24,6 +25,7 @@ model User {
   @@unique([email])
   @@index([role])
   @@index([deletedAt])
+  @@index([suspendedAt])
   @@map("user")
 }
 

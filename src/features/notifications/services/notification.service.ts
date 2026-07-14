@@ -3,7 +3,9 @@ import type { Session } from "@/core/auth/auth";
 import { ForbiddenError, NotFoundError } from "@/core/api/errors";
 import { paginationMeta, paginationSkipTake } from "@/core/api/pagination";
 import * as notificationRepo from "@/features/notifications/repository/notification.repository";
+import { listUserIds } from "@/features/users/repository/user.repository";
 import type {
+  BroadcastNotificationInput,
   CreateNotificationInput,
   ListNotificationsQuery,
 } from "@/features/notifications/validation/notification.validation";
@@ -42,4 +44,16 @@ export async function markNotificationReadService(
 
 export async function markAllNotificationsReadService(session: Session) {
   return notificationRepo.markAllNotificationsRead(session.user.id);
+}
+
+export async function broadcastNotificationService(
+  input: BroadcastNotificationInput
+) {
+  const userIds = await listUserIds(input.role);
+  return notificationRepo.createNotificationsForUsers({
+    userIds,
+    type: "SYSTEM_ANNOUNCEMENT",
+    title: input.title,
+    message: input.message,
+  });
 }

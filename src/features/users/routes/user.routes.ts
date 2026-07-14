@@ -7,13 +7,17 @@ import { parseSearchParams } from "@/core/api/pagination";
 import { userIdParamSchema } from "@/core/api/schemas";
 import {
   confirmAvatarSchema,
+  createUserSchema,
   listUsersQuerySchema,
   requestAvatarUploadUrlSchema,
   updateUserRoleSchema,
   updateUserSchema,
+  updateUserStatusSchema,
 } from "@/features/users/validation/user.validation";
 import {
+  adminUpdateUserService,
   confirmAvatarService,
+  createUserService,
   deactivateUserService,
   deleteOwnAccountService,
   getUserByIdService,
@@ -21,6 +25,7 @@ import {
   requestAvatarUploadUrlService,
   updateOwnProfileService,
   updateUserRoleService,
+  updateUserStatusService,
 } from "@/features/users/services/user.service";
 
 export async function listUsersHandler(request: NextRequest) {
@@ -32,6 +37,28 @@ export async function listUsersHandler(request: NextRequest) {
   return successResponse(items, { meta });
 }
 
+export async function createUserHandler(request: NextRequest) {
+  const session = await requireRole(...ADMIN_ROLES);
+
+  const body = createUserSchema.parse(await request.json());
+  const user = await createUserService(session.user.id, body);
+
+  return successResponse(user, { status: 201 });
+}
+
+export async function updateUserStatusHandler(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const session = await requireRole(...ADMIN_ROLES);
+
+  const { id } = userIdParamSchema.parse(await context.params);
+  const body = updateUserStatusSchema.parse(await request.json());
+  const user = await updateUserStatusService(session, id, body);
+
+  return successResponse(user);
+}
+
 export async function getUserHandler(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -40,6 +67,19 @@ export async function getUserHandler(
 
   const { id } = userIdParamSchema.parse(await context.params);
   const user = await getUserByIdService(id);
+
+  return successResponse(user);
+}
+
+export async function adminUpdateUserHandler(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const session = await requireRole(...ADMIN_ROLES);
+
+  const { id } = userIdParamSchema.parse(await context.params);
+  const body = updateUserSchema.parse(await request.json());
+  const user = await adminUpdateUserService(session.user.id, id, body);
 
   return successResponse(user);
 }

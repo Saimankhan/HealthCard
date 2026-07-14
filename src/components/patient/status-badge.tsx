@@ -19,6 +19,9 @@ const STATUS_VARIANTS: Record<
   ACTIVE: "default",
   EXPIRED: "secondary",
   REVOKED: "destructive",
+  // User account status
+  SUSPENDED: "destructive",
+  DELETED: "destructive",
 };
 
 function formatStatusLabel(status: string): string {

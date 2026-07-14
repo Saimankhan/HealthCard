@@ -45,7 +45,11 @@ type PatientListItem = {
   user: { id: string; name: string; email: string };
 };
 
-export function PatientsList() {
+export function PatientsList({
+  basePath = "/doctor/patients",
+}: {
+  basePath?: string;
+} = {}) {
   const [items, setItems] = useState<PatientListItem[] | null>(null);
   const [search, setSearch] = useState("");
   const [gender, setGender] = useState("ALL");
@@ -145,9 +149,7 @@ export function PatientsList() {
                   variant="outline"
                   size="sm"
                   render={
-                    <Link href={`/doctor/patients/${patient.id}`}>
-                      View profile
-                    </Link>
+                    <Link href={`${basePath}/${patient.id}`}>View profile</Link>
                   }
                 />
               </CardContent>
