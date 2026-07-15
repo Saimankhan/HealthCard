@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CalendarDays, IdCard, ShieldCheck } from "lucide-react";
 
 import { getCurrentSession } from "@/core/auth/rbac";
+import { isAdminRole } from "@/core/auth/roles";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -15,6 +16,10 @@ export default async function Home() {
 
   if (session?.user.role === "DOCTOR") {
     redirect("/doctor");
+  }
+
+  if (isAdminRole(session?.user.role)) {
+    redirect("/admin");
   }
 
   if (session) {

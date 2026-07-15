@@ -45,7 +45,7 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof loginSchema>) {
     setIsSubmitting(true);
-    const { error } = await authClient.signIn.email({
+    const { data, error } = await authClient.signIn.email({
       email: values.email,
       password: values.password,
       rememberMe: values.rememberMe,
@@ -58,7 +58,15 @@ export function LoginForm() {
     }
 
     toast.success("Welcome back!");
-    router.push("/patient");
+
+    const role = data?.user?.role;
+    if (role === "DOCTOR") {
+      router.push("/doctor");
+    } else if (role === "ADMIN" || role === "SUPER_ADMIN") {
+      router.push("/admin");
+    } else {
+      router.push("/patient");
+    }
     router.refresh();
   }
 
